@@ -10,7 +10,7 @@ class FrameImageDataset(torch.utils.data.Dataset):
     root_dir='/dtu/datasets1/02516/ufc10',
     split='train', 
     transform=None
-):
+    ):
         self.frame_paths = sorted(glob(f'{root_dir}/frames/{split}/*/*/*.jpg'))
         self.df = pd.read_csv(f'{root_dir}/metadata/{split}.csv')
         self.split = split
@@ -44,7 +44,7 @@ class FrameVideoDataset(torch.utils.data.Dataset):
     split = 'train', 
     transform = None,
     stack_frames = True
-):
+    ):
 
         self.video_paths = sorted(glob(f'{root_dir}/videos/{split}/*/*.avi'))
         self.df = pd.read_csv(f'{root_dir}/metadata/{split}.csv')
@@ -77,7 +77,6 @@ class FrameVideoDataset(torch.utils.data.Dataset):
         if self.stack_frames:
             frames = torch.stack(frames).permute(1, 0, 2, 3)
 
-
         return frames, label
     
     def load_frames(self, frames_dir):
@@ -97,20 +96,20 @@ if __name__ == '__main__':
 
     transform = T.Compose([T.Resize((64, 64)),T.ToTensor()])
     frameimage_dataset = FrameImageDataset(root_dir=root_dir, split='val', transform=transform)
-    framevideostack_dataset = FrameVideoDataset(root_dir=root_dir, split='val', transform=transform, stack_frames = True)
     framevideolist_dataset = FrameVideoDataset(root_dir=root_dir, split='val', transform=transform, stack_frames = False)
+    framevideostack_dataset = FrameVideoDataset(root_dir=root_dir, split='val', transform=transform, stack_frames = True)
 
     frameimage_loader = DataLoader(frameimage_dataset,  batch_size=8, shuffle=False)
-    framevideostack_loader = DataLoader(framevideostack_dataset,  batch_size=8, shuffle=False)
     framevideolist_loader = DataLoader(framevideolist_dataset,  batch_size=8, shuffle=False)
+    framevideostack_loader = DataLoader(framevideostack_dataset,  batch_size=8, shuffle=False)
 
-    # for frames, labels in frameimage_loader:
-    #     print(frames.shape, labels.shape) # [batch, channels, height, width]
+    for frames, labels in frameimage_loader:
+        print(frames.shape, labels.shape) # [batch, channels, height, width]
 
-    # for video_frames, labels in framevideolist_loader:
-    #     print(45*'-')
-    #     for frame in video_frames: # loop through number of frames
-    #         print(frame.shape, labels.shape)# [batch, channels, height, width]
+    for video_frames, labels in framevideolist_loader:
+        print(45*'-')
+        for frame in video_frames: # loop through number of frames
+            print(frame.shape, labels.shape)# [batch, channels, height, width]
 
     for video_frames, labels in framevideostack_loader:
         print(video_frames.shape, labels.shape) # [batch, channels, number of frames, height, width]
