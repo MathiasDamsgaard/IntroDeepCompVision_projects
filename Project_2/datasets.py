@@ -7,7 +7,7 @@ from torchvision import transforms as T
 
 class FrameImageDataset(torch.utils.data.Dataset):
     def __init__(self, 
-    root_dir='/work3/ppar/data/ucf101',
+    root_dir='/dtu/datasets1/02516/ufc10',
     split='train', 
     transform=None
 ):
@@ -40,7 +40,7 @@ class FrameImageDataset(torch.utils.data.Dataset):
 
 class FrameVideoDataset(torch.utils.data.Dataset):
     def __init__(self, 
-    root_dir = '/work3/ppar/data/ucf101', 
+    root_dir = '/dtu/datasets1/02516/ufc10', 
     split = 'train', 
     transform = None,
     stack_frames = True
@@ -93,13 +93,12 @@ class FrameVideoDataset(torch.utils.data.Dataset):
 if __name__ == '__main__':
     from torch.utils.data import DataLoader
 
-    root_dir = '/work3/ppar/data/ucf101'
+    root_dir = '/dtu/datasets1/02516/ufc10'
 
     transform = T.Compose([T.Resize((64, 64)),T.ToTensor()])
     frameimage_dataset = FrameImageDataset(root_dir=root_dir, split='val', transform=transform)
     framevideostack_dataset = FrameVideoDataset(root_dir=root_dir, split='val', transform=transform, stack_frames = True)
     framevideolist_dataset = FrameVideoDataset(root_dir=root_dir, split='val', transform=transform, stack_frames = False)
-
 
     frameimage_loader = DataLoader(frameimage_dataset,  batch_size=8, shuffle=False)
     framevideostack_loader = DataLoader(framevideostack_dataset,  batch_size=8, shuffle=False)
@@ -115,4 +114,3 @@ if __name__ == '__main__':
 
     for video_frames, labels in framevideostack_loader:
         print(video_frames.shape, labels.shape) # [batch, channels, number of frames, height, width]
-            
