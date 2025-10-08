@@ -4,16 +4,24 @@ version = "0.1.0"
 description = "Deep computer vision course projects"
 readme = "README.md"
 requires-python = ">=3.13"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+]
 dependencies = [
-    "grad-cam>=1.5.5",
-    "ipykernel>=6.30.1",
-    "ipywidgets>=8.1.7",
-    "matplotlib>=3.10.6",
-    "pandas>=2.3.3",
-    "pillow>=11.3.0",
-    "torch>=2.8.0",
-    "torchvision>=0.23.0",
-    "tqdm>=4.67.1",
+  "grad-cam>=1.5.5",
+  "ipykernel>=6.30.1",
+  "ipywidgets>=8.1.7",
+  "matplotlib>=3.10.6",
+  "pandas>=2.3.3",
+  "pillow>=11.3",
+  "torch>=2.8",
+  "torchvision>=0.23",
+  "tqdm>=4.67.1",
+]
+[project.optional-dependencies]
+dev = [
+  "pre-commit>=4.3",
+  "ruff>=0.14",
 ]
 
 [tool.uv.sources]
