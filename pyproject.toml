@@ -1,7 +1,7 @@
 [project]
 name = "introdeepcompvision-projects"
 version = "0.1.0"
-description = "Add your description here"
+description = "Deep computer vision course projects"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -15,3 +15,16 @@ dependencies = [
     "torchvision>=0.23.0",
     "tqdm>=4.67.1",
 ]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu129" },
+]
+torchvision = [
+  { index = "pytorch-cu129" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu129"
+url = "https://download.pytorch.org/whl/cu129"
+explicit = true
