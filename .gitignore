@@ -214,3 +214,6 @@ __marimo__/
 
 # vscode settings
 .vscode/
+
+# HPC logs
+logs/*
