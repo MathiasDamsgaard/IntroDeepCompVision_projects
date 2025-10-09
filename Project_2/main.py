@@ -1,9 +1,7 @@
-"""This is main.py use this to add arguments and run your training and evaluation code"""
-
 import argparse
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Training and Evaluation")
     parser.add_argument(
         "--root_dir",
@@ -24,5 +22,4 @@ def parse_args():
         choices=["2D_CNN_aggr", "2D_CNN_late_fusion", "2D_CNN_early_fusion", "3D_CNN"],
         help="Model architecture to use",
     )
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
