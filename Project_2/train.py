@@ -3,7 +3,7 @@ import argparse
 import torch
 from datasets import FrameImageDataset, FrameVideoDataset
 from logger import logger
-from model import VideoClassifier
+from model import BaselineClassifier
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
@@ -41,7 +41,7 @@ if __name__ == "__main__":
     frameimageval_loader = DataLoader(frameimageval_dataset, batch_size=batch_size, shuffle=True)
     framevideotest_loader = DataLoader(framevideotest_dataset, batch_size=batch_size, shuffle=True)
 
-    model = VideoClassifier(n_classes=n_classes)
+    model = BaselineClassifier(n_classes=n_classes)
 
     # Train on individual frames from the training set, validate on individual frames
     train_acc, test_acc = model.fit(

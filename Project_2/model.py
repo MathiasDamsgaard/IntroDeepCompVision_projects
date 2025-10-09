@@ -5,7 +5,7 @@ from torchvision import models
 from torchvision.models import ResNet18_Weights
 
 
-class VideoClassifier(nn.Module):
+class BaselineClassifier(nn.Module):
     def __init__(self, n_classes: int = 10) -> None:
         """Initialize the VideoClassifier with a pretrained ResNet18 backbone.
 
