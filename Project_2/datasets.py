@@ -7,6 +7,8 @@ from torchvision import transforms as T
 
 
 class FrameImageDataset(torch.utils.data.Dataset):
+    """Dataset that returns individual frames from videos.
+    Used for training and validation where we treat each frame independently."""
     def __init__(
         self, root_dir="/dtu/datasets1/02516/ufc10", split="train", transform=None
     ):
@@ -38,6 +40,12 @@ class FrameImageDataset(torch.utils.data.Dataset):
 
 
 class FrameVideoDataset(torch.utils.data.Dataset):
+    """Dataset that returns all frames of a video together.
+    Used for testing where we want to aggregate predictions across all frames of a video.
+    
+    If stack_frames=True: returns tensor of shape [C, n_frames, H, W]
+    If stack_frames=False: returns list of n_frames tensors, each of shape [C, H, W]
+    """
     def __init__(
         self,
         root_dir="/dtu/datasets1/02516/ufc10",
@@ -51,7 +59,7 @@ class FrameVideoDataset(torch.utils.data.Dataset):
         self.transform = transform
         self.stack_frames = stack_frames
 
-        self.n_sampled_frames = 10
+        self.n_sampled_frames = 10  # Number of frames sampled per video
 
     def __len__(self):
         return len(self.video_paths)
@@ -76,6 +84,7 @@ class FrameVideoDataset(torch.utils.data.Dataset):
             frames = [T.ToTensor()(frame) for frame in video_frames]
 
         if self.stack_frames:
+            # Stack frames into single tensor: [n_frames, C, H, W] -> [C, n_frames, H, W]
             frames = torch.stack(frames).permute(1, 0, 2, 3)
 
         return frames, label
