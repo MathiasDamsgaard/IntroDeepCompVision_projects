@@ -108,6 +108,18 @@ class BaselineClassifier(nn.Module):
 
         return train_acc, test_acc
 
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass for the baseline classifier.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape [batch_size, C, H, W]
+
+        Returns:
+            torch.Tensor: Output tensor of shape [batch_size, n_classes]
+
+        """
+        return self.base_model(x.to(self.device))
+
     def evaluate(self, data: torch.Tensor) -> torch.Tensor:
         """Evaluate the model on given data and return raw logits.
 
