@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
-from torchvision import models
-from torchvision.models import ResNet18_Weights
+from torchvision.models import ResNet18_Weights, resnet18
+from torchvision.models.video import R3D_18_Weights, r3d_18
 
 
 class BaselineClassifier(nn.Module):
@@ -20,7 +20,7 @@ class BaselineClassifier(nn.Module):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Transfer learning with pretrained ResNet18
-        self.base_model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+        self.base_model = resnet18(weights=ResNet18_Weights.DEFAULT)
 
         # Replace the final fully connected layer for our 10 classes
         self.base_model.fc = nn.Linear(self.base_model.fc.in_features, n_classes)
@@ -151,7 +151,7 @@ class EarlyFusionCNN(nn.Module):
         self.n_frames = n_frames
 
         # Modified ResNet with expanded input channels to accommodate stacked frames
-        self.base_model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+        self.base_model = resnet18(weights=ResNet18_Weights.DEFAULT)
 
         # Modify the first conv layer to handle n_frames * 3 channels instead of just 3
         original_conv1 = self.base_model.conv1
@@ -280,7 +280,7 @@ class LateFusionCNN(nn.Module):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Frame feature extractor using pretrained ResNet18
-        self.base_model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+        self.base_model = resnet18(weights=ResNet18_Weights.DEFAULT)
 
         # Remove the final classification layer, keeping the feature extractor
         self.feature_size = self.base_model.fc.in_features  # Usually 512 for ResNet18
@@ -406,7 +406,8 @@ class LateFusionCNN(nn.Module):
 class CNN3D(nn.Module):
     """3D CNN model for video classification.
 
-    This model uses 3D convolutions to jointly capture spatial and temporal information.
+    This model uses 3D convolutions (ResNet-18 backbone) to jointly capture
+    spatial and temporal information in videos.
     """
 
     def __init__(self, n_classes: int = 10, n_frames: int = 10) -> None:
@@ -415,14 +416,89 @@ class CNN3D(nn.Module):
         self.n_frames = n_frames
         self.n_classes = n_classes
 
-    def forward(self) -> NotImplementedError:
-        """Forward pass for 3D CNN model.
+        # Load pretrained 3D ResNet-18
+        self.base_model = r3d_18(weights=R3D_18_Weights.DEFAULT)
+
+        # Replace final fully connected layer
+        self.base_model.fc = nn.Linear(self.base_model.fc.in_features, n_classes)
+        self.base_model.to(self.device)
+
+        # Freeze backbone (all layers except final fc)
+        for name, param in self.base_model.named_parameters():
+            if not name.startswith("fc"):
+                param.requires_grad = False
+
+        # Optimizer only on trainable params (fc layer)
+        self.optimizer = torch.optim.Adam(
+            filter(lambda p: p.requires_grad, self.base_model.parameters()),
+            lr=1e-3,
+            weight_decay=1e-2,
+        )
+
+        # CrossEntropyLoss for classification
+        self.criterion = nn.CrossEntropyLoss()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass for 3D CNN.
 
         Args:
-            x: Tensor of shape [batch_size, C, n_frames, H, W]
+            x (torch.Tensor): Input of shape [batch_size, C, T, H, W]
 
         Returns:
-            Tensor of shape [batch_size, n_classes] containing class logits
+            torch.Tensor: Class logits [batch_size, n_classes]
 
         """
-        return NotImplementedError("3D CNN forward pass not implemented")
+        x = x.to(self.device)
+        return self.base_model(x)
+
+    def fit(
+        self, num_epochs: int, train_loader: DataLoader, test_loader: DataLoader
+    ) -> tuple[list[float], list[float]]:
+        """Train the model on the training set and evaluate on validation set."""
+        train_acc, test_acc = [], []
+        self.base_model.to(self.device)
+
+        for _ in range(num_epochs):
+            # Training phase
+            self.base_model.train()
+            train_correct = 0
+            total_train_samples = 0
+
+            for data, target in train_loader:
+                data_gpu, target_gpu = data.to(self.device), target.to(self.device)
+
+                self.optimizer.zero_grad()
+                output = self.base_model(data_gpu)
+                loss = self.criterion(output, target_gpu)
+                loss.backward()
+                self.optimizer.step()
+
+                predicted = output.argmax(1)
+                train_correct += (predicted == target_gpu).sum().cpu().item()
+                total_train_samples += target_gpu.size(0)
+
+            # Validation phase
+            self.base_model.eval()
+            test_correct = 0
+            total_test_samples = 0
+
+            with torch.no_grad():
+                for data, target in test_loader:
+                    data_gpu, target_gpu = data.to(self.device), target.to(self.device)
+                    output = self.base_model(data_gpu)
+                    predicted = output.argmax(1)
+                    test_correct += (predicted == target_gpu).sum().cpu().item()
+                    total_test_samples += target_gpu.size(0)
+
+            train_acc.append(train_correct / total_train_samples)
+            test_acc.append(test_correct / total_test_samples)
+
+        return train_acc, test_acc
+
+    def evaluate(self, data: torch.Tensor) -> torch.Tensor:
+        """Evaluate the model on given data and return raw logits."""
+        self.base_model.eval()
+        data = data.to(self.device)
+        with torch.no_grad():
+            output = self.base_model(data)
+        return output.cpu()

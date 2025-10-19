@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import torch
 from datasets import FrameImageDataset, FrameVideoDataset
 from logger import logger
-from model import BaselineClassifier, EarlyFusionCNN, LateFusionCNN
+from model import CNN3D, BaselineClassifier, EarlyFusionCNN, LateFusionCNN
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
@@ -44,27 +44,40 @@ def parse_args() -> argparse.Namespace:
 
 
 def create_dataloaders(args: argparse.Namespace) -> tuple[DataLoader, DataLoader, DataLoader]:
-    """Create dataloaders for training, validation, and testing."""
+    """Create dataloaders for training, validation, and testing.
+
+    For 3D_CNN, we use FrameVideoDataset with stack_frames=True to get [C, T, H, W] per sample.
+    For 2D models, we keep training/val on individual frames and test on lists of frames.
+    """
     transform = transforms.Compose([transforms.Resize((args.image_size, args.image_size)), transforms.ToTensor()])
 
-    # FrameImageDataset: Returns individual frames for training/validation
-    frameimagetrain_dataset = FrameImageDataset(root_dir=args.root_dir, split="train", transform=transform)
-    frameimageval_dataset = FrameImageDataset(root_dir=args.root_dir, split="val", transform=transform)
+    if args.model == "3D_CNN":
+        # Use video-level samples with frames stacked: [C, T, H, W]
+        train_ds = FrameVideoDataset(root_dir=args.root_dir, split="train", transform=transform, stack_frames=True)
+        val_ds = FrameVideoDataset(root_dir=args.root_dir, split="val", transform=transform, stack_frames=True)
+        test_ds = FrameVideoDataset(root_dir=args.root_dir, split="test", transform=transform, stack_frames=True)
 
-    # FrameVideoDataset: Returns all frames of a video as a list (stack_frames=False)
-    framevideotest_dataset = FrameVideoDataset(
-        root_dir=args.root_dir, split="test", transform=transform, stack_frames=False
-    )
+        train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
+        val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=True)
+        test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=True)
+    else:
+        # 2D models: frame-level training/val, video-level testing as list of frames
+        frameimagetrain_dataset = FrameImageDataset(root_dir=args.root_dir, split="train", transform=transform)
+        frameimageval_dataset = FrameImageDataset(root_dir=args.root_dir, split="val", transform=transform)
 
-    train_loader = DataLoader(frameimagetrain_dataset, batch_size=args.batch_size, shuffle=True)
-    val_loader = DataLoader(frameimageval_dataset, batch_size=args.batch_size, shuffle=True)
-    test_loader = DataLoader(framevideotest_dataset, batch_size=args.batch_size, shuffle=True)
+        framevideotest_dataset = FrameVideoDataset(
+            root_dir=args.root_dir, split="test", transform=transform, stack_frames=False
+        )
+
+        train_loader = DataLoader(frameimagetrain_dataset, batch_size=args.batch_size, shuffle=True)
+        val_loader = DataLoader(frameimageval_dataset, batch_size=args.batch_size, shuffle=True)
+        test_loader = DataLoader(framevideotest_dataset, batch_size=args.batch_size, shuffle=True)
 
     logger.info(f"Created dataloaders with batch size {args.batch_size}")
     return train_loader, val_loader, test_loader
 
 
-def create_model(args: argparse.Namespace) -> BaselineClassifier | LateFusionCNN | EarlyFusionCNN:
+def create_model(args: argparse.Namespace) -> BaselineClassifier | LateFusionCNN | EarlyFusionCNN | CNN3D:
     """Create model based on the specified architecture."""
     n_classes = 10  # UFC10 dataset has 10 classes
     n_frames = 10  # Number of frames per video
@@ -93,8 +106,10 @@ def create_model(args: argparse.Namespace) -> BaselineClassifier | LateFusionCNN
         model = EarlyFusionCNN(n_classes=n_classes, n_frames=n_frames)
         model.optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
-    # elif args.model == "3D_CNN":
-    # TODO: Not implemented yet  # noqa: FIX002
+    elif args.model == "3D_CNN":
+        # 3D CNN model
+        model = CNN3D(n_classes=n_classes, n_frames=n_frames)
+        model.optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
     else:
         msg = f"Unknown model architecture: {args.model}"
@@ -105,7 +120,9 @@ def create_model(args: argparse.Namespace) -> BaselineClassifier | LateFusionCNN
 
 
 def evaluate_on_videos(
-    model: BaselineClassifier | LateFusionCNN | EarlyFusionCNN, test_loader: DataLoader, args: argparse.Namespace
+    model: BaselineClassifier | LateFusionCNN | EarlyFusionCNN | CNN3D,
+    test_loader: DataLoader,
+    args: argparse.Namespace,
 ) -> float:
     """Evaluate the model on complete test videos."""
     logger.info("Evaluating model on test videos...")
@@ -113,14 +130,23 @@ def evaluate_on_videos(
     n_frames = 10  # Number of frames per video
     total_samples = 0
 
+    # Expected tensor dimensions
+    tensor_channel_size = 4
+    tensor_batch_size = 5
+
     for frames, targets in test_loader:
         batch_size = targets.size(0)
         total_samples += batch_size
 
-        # Use ternary operator for more concise code
+        # Make frames a tensor with shape [B, C, T, H, W] when needed
         frames_tensor = torch.stack(frames, dim=2) if isinstance(frames, list) else frames
+        if frames_tensor.dim() == tensor_channel_size:
+            # If dataset provided [C, T, H, W], add batch dim
+            frames_tensor = frames_tensor.unsqueeze(0)
+        if frames_tensor.dim() != tensor_batch_size:
+            msg = f"Expected frames with 5 dims [B, C, T, H, W], got {frames_tensor.shape}"
+            raise ValueError(msg)
 
-        # Now use frames_tensor which is guaranteed to be a tensor
         batch_size, c, n_frames, h, w = frames_tensor.shape
 
         # Handle different model architectures
@@ -159,6 +185,12 @@ def evaluate_on_videos(
                 logits = model(stacked_frames)
             predictions = torch.softmax(logits, dim=1)
 
+        elif args.model == "3D_CNN":
+            # For 3D CNNs, pass the whole clip [B, C, T, H, W]
+            device = next(model.parameters()).device
+            with torch.no_grad():
+                logits = model(frames_tensor.to(device))
+            predictions = torch.softmax(logits, dim=1)
         else:
             msg = f"Evaluation not implemented for model: {args.model}"
             raise NotImplementedError(msg)
@@ -176,7 +208,7 @@ def evaluate_on_videos(
 
 
 def save_results(
-    model: BaselineClassifier | LateFusionCNN | EarlyFusionCNN,
+    model: BaselineClassifier | LateFusionCNN | EarlyFusionCNN | CNN3D,
     train_acc: list,
     val_acc: list,
     test_acc: float,

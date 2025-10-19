@@ -13,13 +13,14 @@
 mkdir -p logs
 
 # Default model parameters
-MODEL="2D_CNN_early_fusion"
+MODEL="3D_CNN"
 NUM_EPOCHS=5
 BATCH_SIZE=8
 IMAGE_SIZE=64
 OUTPUT_DIR="./outputs"
 SAVE_MODEL=""  # Empty means don't save
 ROOT_DIR="/dtu/datasets1/02516/ufc10"
+# No leakage dir: /dtu/datasets1/02516/ucf101_noleakage
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do

@@ -3,7 +3,7 @@ import argparse
 import torch
 from datasets import FrameImageDataset, FrameVideoDataset
 from logger import logger
-from model import BaselineClassifier
+from model import CNN3D
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
@@ -33,38 +33,76 @@ if __name__ == "__main__":
     # FrameImageDataset: Returns individual frames for training/validation
     frameimagetrain_dataset = FrameImageDataset(root_dir=root_dir, split="train", transform=transform)
     frameimageval_dataset = FrameImageDataset(root_dir=root_dir, split="val", transform=transform)
+    frameimagetest_dataset = FrameImageDataset(root_dir=root_dir, split="test", transform=transform)
 
     # FrameVideoDataset: Returns all frames of a video as a list (stack_frames=False)
+    framevideotrain_dataset = FrameVideoDataset(
+        root_dir=root_dir, split="train", transform=transform, stack_frames=False
+    )
+    framevideoval_dataset = FrameVideoDataset(root_dir=root_dir, split="val", transform=transform, stack_frames=False)
     framevideotest_dataset = FrameVideoDataset(root_dir=root_dir, split="test", transform=transform, stack_frames=False)
 
+    # FrameVideoDataset: For 3D CNN we want stacked frames [C, T, H, W]
+    framevideotrainstack_dataset = FrameVideoDataset(
+        root_dir=root_dir, split="train", transform=transform, stack_frames=True
+    )
+    framevideovalstack_dataset = FrameVideoDataset(
+        root_dir=root_dir, split="val", transform=transform, stack_frames=True
+    )
+    framevideoteststack_dataset = FrameVideoDataset(
+        root_dir=root_dir, split="test", transform=transform, stack_frames=True
+    )
+
+    # DataLoaders
     frameimagetrain_loader = DataLoader(frameimagetrain_dataset, batch_size=batch_size, shuffle=True)
     frameimageval_loader = DataLoader(frameimageval_dataset, batch_size=batch_size, shuffle=True)
+    frameimagetest_loader = DataLoader(frameimagetest_dataset, batch_size=batch_size, shuffle=True)
+
+    framevideotrain_loader = DataLoader(framevideotrain_dataset, batch_size=batch_size, shuffle=True)
+    framevideoval_loader = DataLoader(framevideoval_dataset, batch_size=batch_size, shuffle=True)
     framevideotest_loader = DataLoader(framevideotest_dataset, batch_size=batch_size, shuffle=True)
 
-    model = BaselineClassifier(n_classes=n_classes)
+    framevideotrainstack_loader = DataLoader(framevideotrainstack_dataset, batch_size=batch_size, shuffle=True)
+    framevideovalstack_loader = DataLoader(framevideovalstack_dataset, batch_size=batch_size, shuffle=True)
+    framevideoteststack_loader = DataLoader(framevideoteststack_dataset, batch_size=batch_size, shuffle=True)
+
+    model = CNN3D(n_classes=n_classes, n_frames=n_frames)
 
     # Train on individual frames from the training set, validate on individual frames
     train_acc, test_acc = model.fit(
-        num_epochs=args.num_epochs, train_loader=frameimagetrain_loader, test_loader=frameimageval_loader
+        num_epochs=args.num_epochs, train_loader=framevideotrainstack_loader, test_loader=framevideovalstack_loader
     )
+
     # Evaluate on complete videos by averaging predictions across all frames
     n_correct = 0
-    for frames, targets in framevideotest_loader:
-        batch_size = targets.size(0)
-        # Initialize prediction accumulator for this batch (reset for each batch!)
-        predictions = torch.zeros((batch_size, n_frames))
+    # for frames, targets in framevideotest_loader:
+    #     batch_size = targets.size(0)
+    #     # Initialize prediction accumulator for this batch (reset for each batch!)
+    #     predictions = torch.zeros((batch_size, n_frames))
 
-        # Average predictions across all frames in each video
-        # frames is a list of 10 frame batches, each with shape [batch_size, C, H, W]
-        for batch in frames:
-            logits = model.evaluate(batch)  # Get raw logits from model
-            # Convert logits to probabilities before averaging (important!)
-            predictions += torch.softmax(logits, dim=1)
+    #     # Average predictions across all frames in each video
+    #     # frames is a list of 10 frame batches, each with shape [batch_size, C, H, W]
+    #     for batch in frames:
+    #         logits = model.evaluate(batch)  # Get raw logits from model
+    #         # Convert logits to probabilities before averaging (important!)
+    #         predictions += torch.softmax(logits, dim=1)
 
-        predictions /= len(frames)  # Average over number of frames (10 frames per video)
+    #     predictions /= len(frames)  # Average over number of frames (10 frames per video)
 
-        # Final prediction is the class with highest average probability
-        n_correct += (predictions.argmax(1) == targets).sum().item()
+    #     # Final prediction is the class with highest average probability
+    #     n_correct += (predictions.argmax(1) == targets).sum().item()
 
-    logger.info(f"Test accuracy on complete videos: {n_correct / len(framevideotest_dataset):.4f}")
+    # logger.info(f"Test accuracy on complete videos: {n_correct / len(framevideotest_dataset):.4f}")
+
+    # Evaluate on complete videos directly as clips [B, C, T, H, W]
+    device = next(model.parameters()).device
+    n_total = 0
+    for clips, targets in framevideoteststack_loader:
+        with torch.no_grad():
+            logits = model(clips.to(device))
+            preds = logits.argmax(1)
+        n_correct += (preds.cpu() == targets).sum().item()
+        n_total += targets.size(0)
+    logger.info(f"Test accuracy on complete videos: {n_correct / n_total:.4f}")
+
     logger.info("Training complete.")
