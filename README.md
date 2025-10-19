@@ -46,4 +46,3 @@ You can customize the GPU job by passing arguments to the script:
 View job output and errors in the `logs/` directory.
 
 Outputs are in `outputs/`.
-
