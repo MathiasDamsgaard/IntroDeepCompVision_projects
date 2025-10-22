@@ -3,12 +3,18 @@ import pickle
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from datasets import FrameImageDataset, FrameVideoDataset
 from logger import logger
 from model import CNN3D, BaselineClassifier, EarlyFusionCNN, LateFusionCNN
-from torch.utils.data import DataLoader
+from scipy import stats
+from sklearn.model_selection import KFold
+from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
+
+# Define a type for our models
+ModelType = BaselineClassifier | LateFusionCNN | EarlyFusionCNN | CNN3D
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,8 +31,8 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         required=True,
-        choices=["2D_CNN_aggr", "2D_CNN_late_fusion", "2D_CNN_early_fusion", "3D_CNN"],
-        help="Model architecture to use",
+        choices=["2D_CNN_aggr", "2D_CNN_late_fusion", "2D_CNN_early_fusion", "3D_CNN", "all"],
+        help="Model architecture to use, or 'all' to run all models",
     )
 
     # Training parameters
@@ -35,6 +41,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--weight_decay", type=float, default=1e-2, help="Weight decay for optimizer")
     parser.add_argument("--image_size", type=int, default=64, help="Image size for resizing (square)")
+
+    # Cross-validation parameters
+    parser.add_argument("--cross_validate", action="store_true", help="Whether to perform cross-validation")
+    parser.add_argument("--n_folds", type=int, default=5, help="Number of cross-validation folds")
 
     # Output and checkpointing
     parser.add_argument("--output_dir", type=str, default="./outputs", help="Directory to save model outputs")
@@ -126,9 +136,9 @@ def create_model(args: argparse.Namespace) -> BaselineClassifier | LateFusionCNN
 
 
 def evaluate_on_videos(
-    model: BaselineClassifier | LateFusionCNN | EarlyFusionCNN | CNN3D,
+    model: ModelType,
     test_loader: DataLoader,
-    args: argparse.Namespace,
+    model_name: str,
 ) -> float:
     """Evaluate the model on complete test videos."""
     logger.info("Evaluating model on test videos...")
@@ -156,9 +166,10 @@ def evaluate_on_videos(
         batch_size, c, n_frames, h, w = frames_tensor.shape
 
         # Handle different model architectures
-        if args.model == "2D_CNN_aggr":
+        device = next(model.parameters()).device
+
+        if model_name == "2D_CNN_aggr":
             # Process each frame independently and average predictions
-            device = next(model.parameters()).device
             predictions = torch.zeros((batch_size, 10)).to(device)
 
             for i in range(n_frames):
@@ -170,7 +181,7 @@ def evaluate_on_videos(
 
             predictions /= n_frames  # Average over number of frames
 
-        elif args.model == "2D_CNN_late_fusion":
+        elif model_name == "2D_CNN_late_fusion":
             # Late fusion model needs a list of frame tensors
             # Use list comprehension to create a list of frame tensors
             frame_list = [frames_tensor[:, :, i, :, :] for i in range(n_frames)]
@@ -179,27 +190,25 @@ def evaluate_on_videos(
                 logits = model(frame_list)
             predictions = torch.softmax(logits, dim=1)
 
-        elif args.model == "2D_CNN_early_fusion":
+        elif model_name == "2D_CNN_early_fusion":
             # Early fusion expects all frames stacked in channels
             # Reshape from [batch, C, n_frames, H, W] to [batch, C*n_frames, H, W]
             batch_size, c, n_frames, h, w = frames_tensor.shape
             stacked_frames = frames_tensor.reshape(batch_size, c * n_frames, h, w)
             # Make sure the stacked_frames are on the same device as the model
-            device = next(model.parameters()).device
             stacked_frames = stacked_frames.to(device)
             with torch.no_grad():
                 logits = model(stacked_frames)
             predictions = torch.softmax(logits, dim=1)
 
-        elif args.model == "3D_CNN":
+        elif model_name == "3D_CNN":
             # For 3D CNNs, pass the whole clip [B, C, T, H, W]
-            device = next(model.parameters()).device
             with torch.no_grad():
                 logits = model(frames_tensor.to(device))
             predictions = torch.softmax(logits, dim=1)
 
         else:
-            msg = f"Evaluation not implemented for model: {args.model}"
+            msg = f"Evaluation not implemented for model: {model_name}"
             raise NotImplementedError(msg)
 
         # Move targets to the same device as predictions for comparison
@@ -215,7 +224,7 @@ def evaluate_on_videos(
 
 
 def save_results(
-    model: BaselineClassifier | LateFusionCNN | EarlyFusionCNN | CNN3D,
+    model: ModelType,
     train_acc: list,
     val_acc: list,
     test_acc: float,
@@ -274,31 +283,251 @@ def save_results(
     logger.info(f"Accuracy plot saved to {plt_path}")
 
 
+def create_fold_dataloaders(
+    root_dir: str,
+    model_name: str,
+    image_size: int,
+    batch_size: int,
+    n_folds: int = 5,
+) -> tuple[list[DataLoader], list[DataLoader], DataLoader]:
+    """Create training and validation dataloaders for k-fold cross validation."""
+    transform = transforms.Compose([transforms.Resize((image_size, image_size)), transforms.ToTensor()])
+
+    # Create datasets based on model type
+    if model_name == "3D_CNN":
+        full_dataset = FrameVideoDataset(root_dir=root_dir, split="train", transform=transform, stack_frames=True)
+        test_dataset = FrameVideoDataset(root_dir=root_dir, split="test", transform=transform, stack_frames=True)
+    else:
+        full_dataset = FrameImageDataset(root_dir=root_dir, split="train", transform=transform)
+        test_dataset = FrameVideoDataset(root_dir=root_dir, split="test", transform=transform, stack_frames=False)
+
+    # Create indices for k-fold CV
+    kfold = KFold(n_splits=n_folds, shuffle=True, random_state=42)
+
+    # Create train and validation loaders for each fold
+    train_loaders = []
+    val_loaders = []
+
+    # Get indices for each fold
+    indices = list(range(len(full_dataset)))
+    for train_idx, val_idx in kfold.split(indices):  # pyright: ignore[reportArgumentType]
+        train_subset = Subset(full_dataset, train_idx)  # pyright: ignore[reportArgumentType]
+        val_subset = Subset(full_dataset, val_idx)  # pyright: ignore[reportArgumentType]
+
+        train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
+
+        train_loaders.append(train_loader)
+        val_loaders.append(val_loader)
+
+    # Create a single test loader
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+    return train_loaders, val_loaders, test_loader
+
+
+def compute_confidence_intervals(accuracies: list[list[float]]) -> tuple[list[float], list[float], list[float]]:
+    """Compute mean and 95% confidence intervals for accuracies across folds."""
+    # Transpose to get lists by epoch
+    n_epochs = len(accuracies[0])
+    n_folds = len(accuracies)
+
+    # Compute means and confidence intervals
+    means = []
+    lower_bounds = []
+    upper_bounds = []
+
+    for epoch in range(n_epochs):
+        epoch_accs = [accuracies[fold][epoch] for fold in range(n_folds)]
+        mean = np.mean(epoch_accs)
+        std = np.std(epoch_accs)
+
+        # 95% CI with t-distribution (small sample size)
+        ci = stats.t.interval(0.95, len(epoch_accs) - 1, loc=mean, scale=std / np.sqrt(len(epoch_accs)))
+
+        means.append(mean)
+        lower_bounds.append(ci[0])
+        upper_bounds.append(ci[1])
+
+    return means, lower_bounds, upper_bounds
+
+
+def plot_cv_results(
+    train_accs: list[list[float]],
+    val_accs: list[list[float]],
+    test_accs: list[float],
+    model_name: str,
+    output_dir: Path,
+) -> None:
+    """Plot cross-validation results with confidence intervals."""
+    # Compute confidence intervals
+    train_means, train_lower, train_upper = compute_confidence_intervals(train_accs)
+    val_means, val_lower, val_upper = compute_confidence_intervals(val_accs)
+
+    test_mean: float = np.mean(test_accs)  # pyright: ignore[reportAssignmentType]
+    test_std: float = np.std(test_accs)  # pyright: ignore[reportAssignmentType]
+    test_ci: tuple[float, float] = stats.t.interval(
+        0.95, len(test_accs) - 1, loc=test_mean, scale=test_std / np.sqrt(len(test_accs))
+    )
+
+    # Create plot
+    plt.figure(figsize=(12, 8))
+
+    # Plot training accuracy
+    epochs = range(1, len(train_means) + 1)
+    plt.plot(epochs, train_means, "b-", label="Training Accuracy")
+    plt.fill_between(epochs, train_lower, train_upper, color="b", alpha=0.2)
+
+    # Plot validation accuracy
+    plt.plot(epochs, val_means, "r-", label="Validation Accuracy")
+    plt.fill_between(epochs, val_lower, val_upper, color="r", alpha=0.2)
+
+    # Plot test accuracy
+    plt.axhline(
+        y=test_mean / 100,
+        color="g",
+        linestyle="-",
+        label=f"Test Accuracy: {test_mean:.2f}% ± {(test_ci[1] - test_mean):.2f}%",
+    )
+    plt.axhspan(test_ci[0] / 100, test_ci[1] / 100, color="g", alpha=0.2)
+
+    # Add labels and title
+    plt.xlabel("Epochs")
+    plt.ylabel("Accuracy")
+    plt.title(f"5-Fold Cross Validation Results: {model_name}")
+    plt.legend()
+    plt.grid(visible=True)
+
+    # Save plot
+    plot_path = output_dir / f"{model_name}_cv_plot.png"
+    plt.savefig(plot_path)
+    plt.close()
+    logger.info(f"Saved CV results plot to {plot_path}")
+
+
+def run_cross_validation(args: argparse.Namespace, model_name: str) -> None:
+    """Run cross-validation for a specific model."""
+    logger.info(f"Running {args.n_folds}-fold cross-validation for {model_name}")
+
+    # Create dataloaders for cross-validation
+    train_loaders, val_loaders, test_loader = create_fold_dataloaders(
+        root_dir=args.root_dir,
+        model_name=model_name,
+        image_size=args.image_size,
+        batch_size=args.batch_size,
+        n_folds=args.n_folds,
+    )
+
+    # Lists to store results for each fold
+    train_accuracies = []
+    val_accuracies = []
+    test_accuracies = []
+
+    # Run cross-validation
+    for fold in range(args.n_folds):
+        logger.info(f"Starting fold {fold + 1}/{args.n_folds}")
+
+        # Create model
+        model = create_model(args)
+
+        # Train model
+        train_acc, val_acc = model.fit(
+            num_epochs=args.num_epochs,
+            train_loader=train_loaders[fold],
+            test_loader=val_loaders[fold],
+        )
+
+        # Test model
+        test_acc = evaluate_on_videos(model, test_loader, model_name)
+
+        # Save results
+        train_accuracies.append(train_acc)
+        val_accuracies.append(val_acc)
+        test_accuracies.append(test_acc)
+
+        logger.info(f"Fold {fold + 1} results:")
+        logger.info(f"  Train accuracy: {train_acc[-1]:.4f}")
+        logger.info(f"  Validation accuracy: {val_acc[-1]:.4f}")
+        logger.info(f"  Test accuracy: {test_acc:.4f}")
+
+    # Create output directory if it doesn't exist
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(exist_ok=True, parents=True)
+
+    # Save results dictionary
+    results = {
+        "model": model_name,
+        "train_accs": train_accuracies,
+        "val_accs": val_accuracies,
+        "test_accs": test_accuracies,
+        "args": vars(args),
+    }
+
+    # Save results to file
+    results_path = output_dir / f"{model_name}_cv_results.pkl"
+    with Path.open(results_path, "wb") as f:
+        pickle.dump(results, f)
+
+    logger.info(f"Saved CV results to {results_path}")
+
+    # Plot cross-validation results
+    plot_cv_results(train_accuracies, val_accuracies, test_accuracies, model_name, output_dir)
+    logger.info(f"Cross-validation completed for {model_name}")
+
+
 def main() -> tuple[float, float, float]:
     """Trains and evaluates models."""
     args = parse_args()
     logger.info(f"Running with arguments: {args}")
 
-    # Create dataloaders
-    train_loader, val_loader, test_loader = create_dataloaders(args)
+    # Determine which models to run
+    models_to_run = (
+        ["2D_CNN_aggr", "2D_CNN_late_fusion", "2D_CNN_early_fusion", "3D_CNN"] if args.model == "all" else [args.model]
+    )
 
-    # Create model
-    model = create_model(args)
+    final_train_acc = 0.0
+    final_val_acc = 0.0
+    final_test_acc = 0.0
 
-    # Train the model
-    logger.info(f"Training {args.model} for {args.num_epochs} epochs...")
+    for model_name in models_to_run:
+        # Override the model name in args to ensure proper model creation
+        args.model = model_name
 
-    train_acc, val_acc = model.fit(num_epochs=args.num_epochs, train_loader=train_loader, test_loader=val_loader)
+        if args.cross_validate:
+            # Run cross-validation
+            run_cross_validation(args, model_name)
+        else:
+            # Standard single train/test run
+            logger.info(f"Training {model_name} for {args.num_epochs} epochs...")
 
-    # Evaluate on test set
-    test_acc = evaluate_on_videos(model, test_loader, args)
+            # Create dataloaders
+            train_loader, val_loader, test_loader = create_dataloaders(args)
 
-    # Save results
-    save_results(model, train_acc, val_acc, test_acc, args)
+            # Create model
+            model = create_model(args)
+
+            # Train model
+            train_acc, val_acc = model.fit(
+                num_epochs=args.num_epochs, train_loader=train_loader, test_loader=val_loader
+            )
+
+            # Evaluate on test set
+            test_acc = evaluate_on_videos(model, test_loader, model_name)
+
+            save_results(model, train_acc, val_acc, test_acc, args)
+
+            # Store the results for the return value
+            final_train_acc = train_acc[-1]
+            final_val_acc = val_acc[-1]
+            final_test_acc = test_acc
 
     logger.info("Done!")
 
-    return train_acc[-1], val_acc[-1], test_acc
+    # Return the results of the last model, or zeros if using cross-validation
+    if args.cross_validate:
+        return 0.0, 0.0, 0.0
+
+    return final_train_acc, final_val_acc, final_test_acc
 
 
 if __name__ == "__main__":
