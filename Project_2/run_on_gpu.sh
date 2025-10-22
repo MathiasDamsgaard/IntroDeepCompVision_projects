@@ -1,5 +1,5 @@
 #!/bin/bash
-#BSUB -J video_cv_all
+#BSUB -J no_leakage_all_models
 #BSUB -q c02516
 #BSUB -gpu "num=1:mode=exclusive_process"
 #BSUB -W 02:00
@@ -20,7 +20,7 @@ IMAGE_SIZE=64
 OUTPUT_DIR="./outputs"
 SAVE_MODEL=""  # Empty means don't save
 ROOT_DIR="/dtu/datasets1/02516/" # ufc10 or ucf101_noleakage
-NO_LEAKAGE="" # Empty means leakage
+NO_LEAKAGE="--no_leakage" # Empty means leakage
 CROSS_VALIDATE="" # Empty means no cross-validation
 N_FOLDS=5
 
