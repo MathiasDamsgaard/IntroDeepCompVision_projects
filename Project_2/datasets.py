@@ -142,6 +142,41 @@ class FrameVideoDataset(torch.utils.data.Dataset):
         return frames
 
 
+class FlowVideoDataset(FrameVideoDataset):
+    """Dataset that returns optical flow frames of a video together.
+
+    Inherits from FrameVideoDataset but looks for optical flow frames instead.
+    """
+
+    def __init__(
+        self,
+        root_dir: str = "/dtu/datasets1/02516/ucf101_noleakage/flows",
+        split: str = "train",
+        transform: transforms.Compose | None = None,
+        stack_frames: bool = True,
+    ) -> None:
+        base_path = Path(root_dir) / "flows" / split
+        self.video_paths = sorted(base_path.glob("*/*.avi"))
+        self.df = pd.read_csv(f"{root_dir}/metadata/{split}.csv")
+        self.split = split
+        self.transform = transform
+        self.stack_frames = stack_frames
+
+        self.n_sampled_frames = 10  # Number of frames sampled per video
+
+    def load_frames(self, frames_dir: Path) -> list[Image.Image]:
+        frames = []
+        for i in range(1, self.n_sampled_frames + 1):
+            frame_file_x = frames_dir / f"flow_x_{i}.jpg"
+            frame_file_y = frames_dir / f"flow_y_{i}.jpg"
+            frame_x = Image.open(frame_file_x).convert("L")  # Grayscale
+            frame_y = Image.open(frame_file_y).convert("L")  # Grayscale
+            # Combine x and y flow into a two-channel image
+            frame = Image.merge("LA", (frame_x, frame_y))
+            frames.append(frame)
+
+        return frames
+
 if __name__ == "__main__":
     from torch.utils.data import DataLoader
 
