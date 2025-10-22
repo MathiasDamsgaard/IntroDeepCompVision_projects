@@ -173,7 +173,9 @@ class FlowVideoDataset(FrameImageDataset):
         return [transforms.ToTensor()(np.load(flow_path)) for flow_path in flow_paths]
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor | list[torch.Tensor], int]:
-        return super().__getitem__(idx), self.load_flow_frames(idx)
+        frame, label = super().__getitem__(idx)
+        flow_frames = self.load_flow_frames(idx)
+        return (frame, flow_frames), label
 
 
 if __name__ == "__main__":
