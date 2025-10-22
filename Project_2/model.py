@@ -403,7 +403,6 @@ class LateFusionCNN(nn.Module):
         return output.cpu()
 
 
-# Test
 class CNN3D(nn.Module):
     """3D CNN model for video classification.
 

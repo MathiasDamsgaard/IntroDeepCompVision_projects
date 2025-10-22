@@ -64,13 +64,13 @@ def create_dataloaders(args: argparse.Namespace) -> tuple[DataLoader, DataLoader
 
     root_path = Path(args.root_dir)
     root_path = root_path / "ucf101_noleakage" if args.no_leakage else root_path / "ufc10"
-    args.root_dir = str(root_path)
+    root_dir = str(root_path)
 
     if args.model == "3D_CNN":
         # Use video-level samples with frames stacked: [C, T, H, W]
-        train_ds = FrameVideoDataset(root_dir=args.root_dir, split="train", transform=transform, stack_frames=True)
-        val_ds = FrameVideoDataset(root_dir=args.root_dir, split="val", transform=transform, stack_frames=True)
-        test_ds = FrameVideoDataset(root_dir=args.root_dir, split="test", transform=transform, stack_frames=True)
+        train_ds = FrameVideoDataset(root_dir=root_dir, split="train", transform=transform, stack_frames=True)
+        val_ds = FrameVideoDataset(root_dir=root_dir, split="val", transform=transform, stack_frames=True)
+        test_ds = FrameVideoDataset(root_dir=root_dir, split="test", transform=transform, stack_frames=True)
 
         train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
         val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=True)
@@ -87,11 +87,10 @@ def create_dataloaders(args: argparse.Namespace) -> tuple[DataLoader, DataLoader
 
     else:
         # 2D models: frame-level training/val, video-level testing as list of frames
-        frameimagetrain_dataset = FrameImageDataset(root_dir=args.root_dir, split="train", transform=transform)
-        frameimageval_dataset = FrameImageDataset(root_dir=args.root_dir, split="val", transform=transform)
-
+        frameimagetrain_dataset = FrameImageDataset(root_dir=root_dir, split="train", transform=transform)
+        frameimageval_dataset = FrameImageDataset(root_dir=root_dir, split="val", transform=transform)
         framevideotest_dataset = FrameVideoDataset(
-            root_dir=args.root_dir, split="test", transform=transform, stack_frames=False
+            root_dir=root_dir, split="test", transform=transform, stack_frames=False
         )
 
         train_loader = DataLoader(frameimagetrain_dataset, batch_size=args.batch_size, shuffle=True)
@@ -296,22 +295,24 @@ def save_results(
 
     # Plot accuracy curves
     plt.figure(figsize=(10, 6))
-    plt.plot(train_acc, label="Training Accuracy")
-    plt.plot(val_acc, label="Validation Accuracy")
+    epochs = range(1, len(train_acc) + 1)
+    plt.plot(epochs, train_acc, label="Training Accuracy")
+    plt.plot(epochs, val_acc, label="Validation Accuracy")
     plt.axhline(y=test_acc / 100, color="r", linestyle="-", label=f"Test Accuracy: {test_acc:.2f}%")
     plt.xlabel("Epochs")
     plt.ylabel("Accuracy")
     if args.no_leakage:
         plt.title(f"Model: {args.model} with no leakage")
     else:
-        plt.title(f"Model: {args.model}")
+        plt.title(f"Model: {args.model} with leakage")
     plt.legend()
     plt.grid(visible=True)
-
+    plt.xticks(epochs)
     if args.no_leakage:
         plt_path = output_dir / f"{args.model}_accuracy_noleak.png"
     else:
         plt_path = output_dir / f"{args.model}_accuracy.png"
+    plt.tight_layout()
     plt.savefig(plt_path)
     logger.info(f"Accuracy plot saved to {plt_path}")
 
