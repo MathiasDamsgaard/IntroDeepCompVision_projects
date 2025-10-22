@@ -19,8 +19,8 @@ BATCH_SIZE=8
 IMAGE_SIZE=64
 OUTPUT_DIR="./outputs"
 SAVE_MODEL=""  # Empty means don't save
-ROOT_DIR="/dtu/datasets1/02516/ufc10"
-# No leakage dir: /dtu/datasets1/02516/ucf101_noleakage
+ROOT_DIR="/dtu/datasets1/02516/" # ufc10 or ucf101_noleakage
+NO_LEAKAGE="" # Empty means leakage
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -53,6 +53,10 @@ while [[ $# -gt 0 ]]; do
       ROOT_DIR="$2"
       shift 2
       ;;
+    --no_leakage)
+      NO_LEAKAGE="--no_leakage"
+      shift
+      ;;
     *)
       echo "Unknown option: $1"
       exit 1
@@ -79,6 +83,7 @@ echo "Image size: $IMAGE_SIZE"
 echo "Output directory: $OUTPUT_DIR"
 echo "Save model: ${SAVE_MODEL:-No}"
 echo "Dataset path: $ROOT_DIR"
+echo "No leakage: ${NO_LEAKAGE:-No}"
 
 # Run the main.py script with provided arguments
 # Assuming main.py is in the current directory (Project_2)
@@ -89,9 +94,10 @@ python Project_2/main.py \
   --image_size $IMAGE_SIZE \
   --output_dir $OUTPUT_DIR \
   --root_dir $ROOT_DIR \
-  $SAVE_MODEL
+  $SAVE_MODEL \
+  $NO_LEAKAGE
 
 # Command to run (example):
 # ./run_on_gpu.sh --model 2D_CNN_aggr --num_epochs 10 --save_model
 # or submit to queue:
-# bsub < run_on_gpu.sh
+# bsub < Project_2/run_on_gpu.sh

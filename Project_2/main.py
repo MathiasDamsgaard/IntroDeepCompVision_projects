@@ -39,6 +39,7 @@ def parse_args() -> argparse.Namespace:
     # Output and checkpointing
     parser.add_argument("--output_dir", type=str, default="./outputs", help="Directory to save model outputs")
     parser.add_argument("--save_model", action="store_true", help="Whether to save the trained model")
+    parser.add_argument("--no_leakage", action="store_true", help="Whether to use no-leakage dataset version")
 
     return parser.parse_args()
 
@@ -51,6 +52,10 @@ def create_dataloaders(args: argparse.Namespace) -> tuple[DataLoader, DataLoader
     """
     transform = transforms.Compose([transforms.Resize((args.image_size, args.image_size)), transforms.ToTensor()])
 
+    root_path = Path(args.root_dir)
+    root_path = root_path / "ucf101_noleakage" if args.no_leakage else root_path / "ufc10"
+    args.root_dir = str(root_path)
+
     if args.model == "3D_CNN":
         # Use video-level samples with frames stacked: [C, T, H, W]
         train_ds = FrameVideoDataset(root_dir=args.root_dir, split="train", transform=transform, stack_frames=True)
@@ -60,6 +65,7 @@ def create_dataloaders(args: argparse.Namespace) -> tuple[DataLoader, DataLoader
         train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
         val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=True)
         test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=True)
+
     else:
         # 2D models: frame-level training/val, video-level testing as list of frames
         frameimagetrain_dataset = FrameImageDataset(root_dir=args.root_dir, split="train", transform=transform)
@@ -191,6 +197,7 @@ def evaluate_on_videos(
             with torch.no_grad():
                 logits = model(frames_tensor.to(device))
             predictions = torch.softmax(logits, dim=1)
+
         else:
             msg = f"Evaluation not implemented for model: {args.model}"
             raise NotImplementedError(msg)
@@ -220,8 +227,12 @@ def save_results(
     output_dir.mkdir(exist_ok=True, parents=True)
 
     # Save model if requested
-    if args.save_model:
+    if args.save_model and args.no_leakage:
+        model_path = output_dir / f"{args.model}_model_noleak.pt"
+    elif args.save_model and not args.no_leakage:
         model_path = output_dir / f"{args.model}_model.pt"
+
+    if args.save_model:
         torch.save(model.state_dict(), model_path)
         logger.info(f"Model saved to {model_path}")
 
@@ -233,8 +244,10 @@ def save_results(
         "test_acc": test_acc,
         "args": vars(args),
     }
-
-    results_path = output_dir / f"{args.model}_results.pkl"
+    if args.no_leakage:
+        results_path = output_dir / f"{args.model}_results_noleak.pkl"
+    else:
+        results_path = output_dir / f"{args.model}_results.pkl"
     with Path(results_path).open("wb") as f:
         pickle.dump(results, f)
     logger.info(f"Results saved to {results_path}")
@@ -246,11 +259,17 @@ def save_results(
     plt.axhline(y=test_acc / 100, color="r", linestyle="-", label=f"Test Accuracy: {test_acc:.2f}%")
     plt.xlabel("Epochs")
     plt.ylabel("Accuracy")
-    plt.title(f"Model: {args.model}")
+    if args.no_leakage:
+        plt.title(f"Model: {args.model} with no leakage")
+    else:
+        plt.title(f"Model: {args.model}")
     plt.legend()
     plt.grid(visible=True)
 
-    plt_path = output_dir / f"{args.model}_accuracy.png"
+    if args.no_leakage:
+        plt_path = output_dir / f"{args.model}_accuracy_noleak.png"
+    else:
+        plt_path = output_dir / f"{args.model}_accuracy.png"
     plt.savefig(plt_path)
     logger.info(f"Accuracy plot saved to {plt_path}")
 
