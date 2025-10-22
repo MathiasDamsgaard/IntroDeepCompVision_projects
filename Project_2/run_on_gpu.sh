@@ -1,5 +1,5 @@
 #!/bin/bash
-#BSUB -J no_leakage_all_models
+#BSUB -J flow_cnn
 #BSUB -q c02516
 #BSUB -gpu "num=1:mode=exclusive_process"
 #BSUB -W 02:00
@@ -13,7 +13,7 @@
 mkdir -p logs
 
 # Default model parameters
-MODEL="all"
+MODEL="Flow_CNN"
 NUM_EPOCHS=10
 BATCH_SIZE=8
 IMAGE_SIZE=64

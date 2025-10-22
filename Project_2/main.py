@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         required=True,
-        choices=["2D_CNN_aggr", "2D_CNN_late_fusion", "2D_CNN_early_fusion", "3D_CNN", "all"],
+        choices=["2D_CNN_aggr", "2D_CNN_late_fusion", "2D_CNN_early_fusion", "3D_CNN", "Flow_CNN", "all"],
         help="Model architecture to use, or 'all' to run all models",
     )
 
@@ -77,9 +77,9 @@ def create_dataloaders(args: argparse.Namespace) -> tuple[DataLoader, DataLoader
         test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=True)
 
     elif args.model == "Flow_CNN":
-        train_ds = FlowImageDataset(root_dir=args.root_dir, split="train", transform=transform)
-        val_ds = FlowImageDataset(root_dir=args.root_dir, split="val", transform=transform)
-        test_ds = FlowVideoDataset(root_dir=args.root_dir, split="test", transform=transform, stack_frames=False)
+        train_ds = FlowImageDataset(root_dir=root_dir, split="train", transform=transform)
+        val_ds = FlowImageDataset(root_dir=root_dir, split="val", transform=transform)
+        test_ds = FlowVideoDataset(root_dir=root_dir, split="test", transform=transform, stack_frames=False)
 
         train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
         val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=True)

@@ -529,8 +529,8 @@ class FlowCNN(nn.Module):
         Similar to VideoClassifier.fit but expects frames to be stacked along channel dimension.
         """
         train_acc, test_acc = [], []
-        self.frame_model.to(self.device)
-        self.flow_model.to(self.device)
+        self.frame_model.to(self.frame_model.device)
+        self.flow_model.to(self.flow_model.device)
 
         for _ in range(num_epochs):
             # Training phase
@@ -540,9 +540,16 @@ class FlowCNN(nn.Module):
             total_train_samples = 0
 
             for (frame, flow), target in train_loader:
-                flow_gpu, target_gpu = flow.to(self.device), target.to(self.device)
-
-                expanded_flow = flow_gpu.repeat(1, self.n_frames, 1, 1)
+                flow_gpu, target_gpu = flow.to(self.flow_model.device), target.to(self.flow_model.device)
+                # flow_gpu has shape [batch_size, 2*(n_frames-1), H, W]
+                # We need to expand it to match the expected input of EarlyFusionCNN
+                # which expects [batch_size, 3*n_frames, H, W]
+                # Calculate how many times we need to repeat along the channel dimension
+                current_channels = flow_gpu.shape[1]
+                target_channels = 3 * self.flow_model.n_frames
+                repeat_factor = (target_channels + current_channels - 1) // current_channels  # Ceiling division
+                expanded_flow = flow_gpu.repeat(1, repeat_factor, 1, 1)[:, :target_channels, :, :]
+                # old: expanded_flow = flow_gpu.repeat(1, self.flow_model.n_frames-1, 1, 1)
 
                 self.flow_model.optimizer.zero_grad()
                 flow_output = self.flow_model(expanded_flow)
@@ -550,7 +557,7 @@ class FlowCNN(nn.Module):
                 flow_loss.backward()
                 self.flow_model.optimizer.step()
 
-                frame_gpu = frame.to(self.device)
+                frame_gpu = frame.to(self.frame_model.device)
                 self.frame_model.optimizer.zero_grad()
                 frame_output = self.frame_model(frame_gpu)
                 frame_loss = self.frame_model.criterion(frame_output, target_gpu)
@@ -571,11 +578,17 @@ class FlowCNN(nn.Module):
 
             with torch.no_grad():
                 for (frame, flow), target in test_loader:
-                    flow_gpu, target_gpu = flow.to(self.device), target.to(self.device)
-                    expanded_flow = flow_gpu.repeat(1, self.n_frames, 1, 1)
+                    flow_gpu, target_gpu = flow.to(self.flow_model.device), target.to(self.flow_model.device)
+                    # flow_gpu has shape [batch_size, 2*(n_frames-1), H, W]
+                    # We need to expand it to match the expected input of EarlyFusionCNN
+                    current_channels = flow_gpu.shape[1]
+                    target_channels = 3 * self.flow_model.n_frames
+                    repeat_factor = (target_channels + current_channels - 1) // current_channels  # Ceiling division
+                    expanded_flow = flow_gpu.repeat(1, repeat_factor, 1, 1)[:, :target_channels, :, :]
                     flow_output = self.flow_model(expanded_flow)
+                    # old: expanded_flow = flow_gpu.repeat(1, self.flow_model.n_frames-1, 1, 1)
 
-                    frame_gpu = frame.to(self.device)
+                    frame_gpu = frame.to(self.frame_model.device)
                     frame_output = self.frame_model(frame_gpu)
 
                     avg_output = (flow_output + frame_output) / 2

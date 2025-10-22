@@ -155,9 +155,10 @@ class FlowImageDataset(FrameImageDataset):
         split: str = "train",
         transform: transforms.Compose | None = None,
     ) -> None:
-        self.flow_paths = sorted((Path(root_dir) / "flows" / split).glob("*/*.npy"))
-        self.frame_paths = sorted((Path(root_dir) / "frames" / split).glob("*/*/*.jpg"))
-        self.df = pd.read_csv(f"{root_dir}/metadata/{split}.csv")
+        self.root_dir = root_dir
+        self.flow_paths = sorted((Path(self.root_dir) / "flows" / split).glob("*/*.npy"))
+        self.frame_paths = sorted((Path(self.root_dir) / "frames" / split).glob("*/*/*.jpg"))
+        self.df = pd.read_csv(f"{self.root_dir}/metadata/{split}.csv")
         self.split = split
         self.transform = transform
 
@@ -166,11 +167,11 @@ class FlowImageDataset(FrameImageDataset):
     def load_flow_frames(self, idx: int) -> list[torch.Tensor]:
         frame_path = self.frame_paths[idx]
         flow_paths = sorted(
-            (Path(root_dir) / "flows" / self.split / frame_path.parent.parent.name / frame_path.parent.name).glob(
+            (Path(self.root_dir) / "flows" / self.split / frame_path.parent.parent.name / frame_path.parent.name).glob(
                 "*.npy"
             )
         )
-        return [transforms.ToTensor()(np.load(flow_path)) for flow_path in flow_paths]
+        return torch.stack([transforms.ToTensor()(np.load(flow_path)) for flow_path in flow_paths])
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor | list[torch.Tensor], int]:
         frame, label = super().__getitem__(idx)
@@ -178,7 +179,7 @@ class FlowImageDataset(FrameImageDataset):
         return (frame, flow_frames), label
 
 
-class FlowVideoDataset(FrameImageDataset):
+class FlowVideoDataset(FrameVideoDataset):
     def __init__(
         self,
         root_dir: str = "/dtu/datasets1/02516/ucf101_noleakage",
@@ -186,9 +187,10 @@ class FlowVideoDataset(FrameImageDataset):
         transform: transforms.Compose | None = None,
         stack_frames: bool = True,
     ) -> None:
-        self.flow_paths = sorted((Path(root_dir) / "flows" / split).glob("*/*.npy"))
-        self.video_paths = sorted((Path(root_dir) / "videos" / split).glob("*/*.avi"))
-        self.df = pd.read_csv(f"{root_dir}/metadata/{split}.csv")
+        self.root_dir = root_dir
+        self.flow_paths = sorted((Path(self.root_dir) / "flows" / split).glob("*/*.npy"))
+        self.video_paths = sorted((Path(self.root_dir) / "videos" / split).glob("*/*.avi"))
+        self.df = pd.read_csv(f"{self.root_dir}/metadata/{split}.csv")
         self.split = split
         self.transform = transform
         self.stack_frames = stack_frames
@@ -198,11 +200,11 @@ class FlowVideoDataset(FrameImageDataset):
     def load_flow_frames(self, idx: int) -> list[torch.Tensor]:
         frame_path = self.frame_paths[idx]
         flow_paths = sorted(
-            (Path(root_dir) / "flows" / self.split / frame_path.parent.parent.name / frame_path.parent.name).glob(
+            (Path(self.root_dir) / "flows" / self.split / frame_path.parent.parent.name / frame_path.parent.name).glob(
                 "*.npy"
             )
         )
-        return [transforms.ToTensor()(np.load(flow_path)) for flow_path in flow_paths]
+        return torch.stack([transforms.ToTensor()(np.load(flow_path)) for flow_path in flow_paths])
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor | list[torch.Tensor], int]:
         frames, label = super().__getitem__(idx)
