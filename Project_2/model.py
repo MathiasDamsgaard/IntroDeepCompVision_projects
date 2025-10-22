@@ -503,3 +503,89 @@ class CNN3D(nn.Module):
         with torch.no_grad():
             output = self.base_model(data)
         return output.cpu()
+
+
+class FlowCNN(nn.Module):
+    def __init__(self, n_classes: int = 10, lr: float = 0.001, weight_decay: float = 0) -> None:
+        super().__init__()
+        self.frame_model = BaselineClassifier(n_classes=n_classes)
+        self.flow_model = EarlyFusionCNN(
+            n_classes=n_classes, n_frames=6
+        )  # (((n_frames - 1) * 2)//3) because we have EarlyFusion expects input to be 3 channels for 10 frames,
+        # but we have 2 channels for 9 frames
+        self.frame_model.optimizer = torch.optim.Adam(self.frame_model.parameters(), lr=lr, weight_decay=weight_decay)
+        self.flow_model.optimizer = torch.optim.Adam(self.flow_model.parameters(), lr=lr, weight_decay=weight_decay)
+
+    def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        frame, flow_frames = x
+        frame_out = self.frame_model(frame)
+        flow_out = self.flow_model(flow_frames)
+        return (frame_out + flow_out) / 2
+
+    def fit(
+        self, num_epochs: int, train_loader: DataLoader, test_loader: DataLoader
+    ) -> tuple[list[float], list[float]]:
+        """Train the model on the training set and evaluate on validation set.
+
+        Similar to VideoClassifier.fit but expects frames to be stacked along channel dimension.
+        """
+        train_acc, test_acc = [], []
+        self.frame_model.to(self.device)
+        self.flow_model.to(self.device)
+
+        for _ in range(num_epochs):
+            # Training phase
+            self.frame_model.train()
+            self.flow_model.train()
+            train_correct = 0
+            total_train_samples = 0
+
+            for (frame, flow), target in train_loader:
+                flow_gpu, target_gpu = flow.to(self.device), target.to(self.device)
+
+                expanded_flow = flow_gpu.repeat(1, self.n_frames, 1, 1)
+
+                self.flow_model.optimizer.zero_grad()
+                flow_output = self.flow_model(expanded_flow)
+                flow_loss = self.flow_model.criterion(flow_output, target_gpu)
+                flow_loss.backward()
+                self.flow_model.optimizer.step()
+
+                frame_gpu = frame.to(self.device)
+                self.frame_model.optimizer.zero_grad()
+                frame_output = self.frame_model(frame_gpu)
+                frame_loss = self.frame_model.criterion(frame_output, target_gpu)
+                frame_loss.backward()
+                self.frame_model.optimizer.step()
+
+                avg_output = (flow_output + frame_output) / 2
+                predicted = avg_output.argmax(1)
+
+                train_correct += (predicted == target_gpu).sum().cpu().item()
+                total_train_samples += target_gpu.size(0)
+
+            # Validation phase
+            self.frame_model.eval()
+            self.flow_model.eval()
+            test_correct = 0
+            total_test_samples = 0
+
+            with torch.no_grad():
+                for (frame, flow), target in test_loader:
+                    flow_gpu, target_gpu = flow.to(self.device), target.to(self.device)
+                    expanded_flow = flow_gpu.repeat(1, self.n_frames, 1, 1)
+                    flow_output = self.flow_model(expanded_flow)
+
+                    frame_gpu = frame.to(self.device)
+                    frame_output = self.frame_model(frame_gpu)
+
+                    avg_output = (flow_output + frame_output) / 2
+                    predicted = avg_output.argmax(1)
+
+                    test_correct += (predicted == target_gpu).sum().cpu().item()
+                    total_test_samples += target_gpu.size(0)
+
+            train_acc.append(train_correct / total_train_samples)
+            test_acc.append(test_correct / total_test_samples)
+
+        return train_acc, test_acc

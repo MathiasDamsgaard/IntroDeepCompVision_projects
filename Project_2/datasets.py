@@ -143,7 +143,7 @@ class FrameVideoDataset(torch.utils.data.Dataset):
         return frames
 
 
-class FlowVideoDataset(FrameImageDataset):
+class FlowImageDataset(FrameImageDataset):
     """Dataset that returns optical flow frames of a video together.
 
     Inherits from FrameImageDataset but looks for optical flow frames instead.
@@ -176,6 +176,38 @@ class FlowVideoDataset(FrameImageDataset):
         frame, label = super().__getitem__(idx)
         flow_frames = self.load_flow_frames(idx)
         return (frame, flow_frames), label
+
+
+class FlowVideoDataset(FrameImageDataset):
+    def __init__(
+        self,
+        root_dir: str = "/dtu/datasets1/02516/ucf101_noleakage",
+        split: str = "train",
+        transform: transforms.Compose | None = None,
+        stack_frames: bool = True,
+    ) -> None:
+        self.flow_paths = sorted((Path(root_dir) / "flows" / split).glob("*/*.npy"))
+        self.video_paths = sorted((Path(root_dir) / "videos" / split).glob("*/*.avi"))
+        self.df = pd.read_csv(f"{root_dir}/metadata/{split}.csv")
+        self.split = split
+        self.transform = transform
+        self.stack_frames = stack_frames
+
+        self.n_sampled_frames = 10  # Number of frames sampled per video
+
+    def load_flow_frames(self, idx: int) -> list[torch.Tensor]:
+        frame_path = self.frame_paths[idx]
+        flow_paths = sorted(
+            (Path(root_dir) / "flows" / self.split / frame_path.parent.parent.name / frame_path.parent.name).glob(
+                "*.npy"
+            )
+        )
+        return [transforms.ToTensor()(np.load(flow_path)) for flow_path in flow_paths]
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor | list[torch.Tensor], int]:
+        frames, label = super().__getitem__(idx)
+        flow_frames = self.load_flow_frames(idx)
+        return (frames, flow_frames), label
 
 
 if __name__ == "__main__":

@@ -5,9 +5,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from datasets import FrameImageDataset, FrameVideoDataset
+from datasets import FlowImageDataset, FlowVideoDataset, FrameImageDataset, FrameVideoDataset
 from logger import logger
-from model import CNN3D, BaselineClassifier, EarlyFusionCNN, LateFusionCNN
+from model import CNN3D, BaselineClassifier, EarlyFusionCNN, FlowCNN, LateFusionCNN
 from scipy import stats
 from sklearn.model_selection import KFold
 from torch.utils.data import DataLoader, Subset
@@ -76,6 +76,15 @@ def create_dataloaders(args: argparse.Namespace) -> tuple[DataLoader, DataLoader
         val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=True)
         test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=True)
 
+    elif args.model == "Flow_CNN":
+        train_ds = FlowImageDataset(root_dir=args.root_dir, split="train", transform=transform)
+        val_ds = FlowImageDataset(root_dir=args.root_dir, split="val", transform=transform)
+        test_ds = FlowVideoDataset(root_dir=args.root_dir, split="test", transform=transform, stack_frames=False)
+
+        train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
+        val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=True)
+        test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=True)
+
     else:
         # 2D models: frame-level training/val, video-level testing as list of frames
         frameimagetrain_dataset = FrameImageDataset(root_dir=args.root_dir, split="train", transform=transform)
@@ -127,6 +136,10 @@ def create_model(args: argparse.Namespace) -> BaselineClassifier | LateFusionCNN
         model = CNN3D(n_classes=n_classes, n_frames=n_frames)
         model.optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
+    elif args.model == "Flow_CNN":
+        # Flow CNN model
+        model = FlowCNN(n_classes=n_classes, lr=args.learning_rate, weight_decay=args.weight_decay)
+
     else:
         msg = f"Unknown model architecture: {args.model}"
         raise ValueError(msg)
@@ -150,9 +163,15 @@ def evaluate_on_videos(
     tensor_channel_size = 4
     tensor_batch_size = 5
 
-    for frames, targets in test_loader:
+    for data, targets in test_loader:
         batch_size = targets.size(0)
         total_samples += batch_size
+
+        if model_name == "Flow_CNN":
+            frames, flows = data
+            flows_tensor = torch.stack(flows, dim=2) if isinstance(flows, list) else flows
+        else:
+            frames = data
 
         # Make frames a tensor with shape [B, C, T, H, W] when needed
         frames_tensor = torch.stack(frames, dim=2) if isinstance(frames, list) else frames
@@ -206,6 +225,20 @@ def evaluate_on_videos(
             with torch.no_grad():
                 logits = model(frames_tensor.to(device))
             predictions = torch.softmax(logits, dim=1)
+
+        elif model_name == "Flow_CNN":
+            # Process each frame independently and average predictions
+            predictions = torch.zeros((batch_size, 10)).to(device)
+
+            flows_batch = flows_tensor.to(device)
+            for i in range(n_frames):
+                # Extract frame i from all videos in batch
+                frames_batch = frames_tensor[:, :, i, :, :].to(device)
+                with torch.no_grad():
+                    logits = model((frames_batch, flows_batch))
+                predictions += torch.softmax(logits, dim=1)
+
+            predictions /= n_frames  # Average over number of frames
 
         else:
             msg = f"Evaluation not implemented for model: {model_name}"
