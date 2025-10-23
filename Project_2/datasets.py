@@ -179,7 +179,12 @@ class FlowImageDataset(FrameImageDataset):
         return (frame, flow_frames), label
 
 
-class FlowVideoDataset(FrameVideoDataset):
+class FlowVideoDataset(torch.utils.data.Dataset):
+    """Dataset that returns both frames and optical flow for videos.
+
+    This class combines regular video frames with optical flow data.
+    """
+
     def __init__(
         self,
         root_dir: str = "/dtu/datasets1/02516/ucf101_noleakage",
@@ -187,28 +192,65 @@ class FlowVideoDataset(FrameVideoDataset):
         transform: transforms.Compose | None = None,
         stack_frames: bool = True,
     ) -> None:
+        # Create a regular frame dataset to leverage its methods
+        self.frame_dataset = FrameVideoDataset(
+            root_dir=root_dir, split=split, transform=transform, stack_frames=stack_frames
+        )
+
         self.root_dir = root_dir
-        self.flow_paths = sorted((Path(self.root_dir) / "flows" / split).glob("*/*.npy"))
-        self.video_paths = sorted((Path(self.root_dir) / "videos" / split).glob("*/*.avi"))
-        self.df = pd.read_csv(f"{self.root_dir}/metadata/{split}.csv")
         self.split = split
         self.transform = transform
         self.stack_frames = stack_frames
+        self.video_paths = self.frame_dataset.video_paths
 
-        self.n_sampled_frames = 10  # Number of frames sampled per video
+    def __len__(self) -> int:
+        """Return the number of videos in the dataset."""
+        return len(self.video_paths)
 
-    def load_flow_frames(self, idx: int) -> list[torch.Tensor]:
-        frame_path = self.frame_paths[idx]
-        flow_paths = sorted(
-            (Path(self.root_dir) / "flows" / self.split / frame_path.parent.parent.name / frame_path.parent.name).glob(
-                "*.npy"
-            )
-        )
+    def load_flow_frames(self, video_path: Path) -> torch.Tensor:
+        """Load optical flow data for a video.
+
+        Args:
+            video_path: Path to the video file
+
+        Returns:
+            Stacked tensor of all flow frames
+
+        """
+        # Extract class and video name from the video path
+        video_name = video_path.stem
+        class_name = video_path.parent.name
+
+        # Find corresponding flow files for this video
+        flow_dir = Path(self.root_dir) / "flows" / self.split / class_name / video_name
+        flow_paths = sorted(flow_dir.glob("*.npy"))
+
+        if not flow_paths:
+            error_msg = f"No flow files found for video {video_name} in {class_name}"
+            raise FileNotFoundError(error_msg)
+
+        # Load and stack the flow frames
         return torch.stack([transforms.ToTensor()(np.load(flow_path)) for flow_path in flow_paths])
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor | list[torch.Tensor], int]:
-        frames, label = super().__getitem__(idx)
-        flow_frames = self.load_flow_frames(idx)
+    def __getitem__(self, idx: int) -> tuple[tuple[torch.Tensor | list[torch.Tensor], torch.Tensor], int]:
+        """Get both frame data and optical flow data for a video.
+
+        Args:
+            idx: Index of the video
+
+        Returns:
+            Tuple containing ((frames, flow_frames), label)
+
+        """
+        # Get the video path for this index
+        video_path = self.video_paths[idx]
+
+        # Get frames using the frame dataset implementation
+        frames, label = self.frame_dataset[idx]
+
+        # Load flow frames using the video path
+        flow_frames = self.load_flow_frames(video_path)
+
         return (frames, flow_frames), label
 
 

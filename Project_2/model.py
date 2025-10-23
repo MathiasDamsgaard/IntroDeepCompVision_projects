@@ -515,10 +515,62 @@ class FlowCNN(nn.Module):
         self.frame_model.optimizer = torch.optim.Adam(self.frame_model.parameters(), lr=lr, weight_decay=weight_decay)
         self.flow_model.optimizer = torch.optim.Adam(self.flow_model.parameters(), lr=lr, weight_decay=weight_decay)
 
+    def _reshape_flow_tensor(self, flow_tensor: torch.Tensor) -> torch.Tensor:
+        """Reshape and adapt a flow tensor to match the expected input format for EarlyFusionCNN.
+
+        Args:
+            flow_tensor: Input flow tensor, can be 4D [batch_size, channels, H, W]
+                        or 5D [batch_size, channels, frames, H, W]
+
+        Returns:
+            Reshaped tensor with correct number of channels (18 for n_frames=6)
+
+        """
+        # Define tensor dimension constants
+        tensor_4d = 4  # [batch_size, channels, height, width]
+        tensor_5d = 5  # [batch_size, channels, frames, height, width]
+
+        # Get the target channels required by the model (18 for n_frames=6)
+        target_channels = 3 * self.flow_model.n_frames  # 3*6 = 18 channels expected
+
+        # Reshape and adapt the flow tensor to the expected format
+        tensor_dims = len(flow_tensor.shape)
+        if tensor_dims == tensor_4d:
+            batch_size, _, height, width = flow_tensor.shape
+
+            # Create a tensor with the right number of channels (18), initialized with zeros
+            expanded_flow = torch.zeros((batch_size, target_channels, height, width), device=flow_tensor.device)
+
+            # Copy the original flow data to the first few channels without resizing
+            channels_to_copy = min(flow_tensor.shape[1], target_channels)
+            expanded_flow[:, :channels_to_copy] = flow_tensor[:, :channels_to_copy]
+
+        elif tensor_dims == tensor_5d:
+            batch_size, channels, frames, height, width = flow_tensor.shape
+
+            # Reshape to [batch_size, channels*frames, H, W]
+            reshaped_flow = flow_tensor.reshape(batch_size, channels * frames, height, width)
+
+            # Create a tensor with the right number of channels (18), initialized with zeros
+            expanded_flow = torch.zeros((batch_size, target_channels, height, width), device=flow_tensor.device)
+
+            # Copy the original flow data to the first few channels without resizing
+            channels_to_copy = min(channels * frames, target_channels)
+            expanded_flow[:, :channels_to_copy] = reshaped_flow[:, :channels_to_copy]
+        else:
+            error_msg = f"Unexpected flow_tensor shape: {flow_tensor.shape}"
+            raise ValueError(error_msg)
+
+        return expanded_flow
+
     def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
         frame, flow_frames = x
         frame_out = self.frame_model(frame)
-        flow_out = self.flow_model(flow_frames)
+
+        # Use the helper method to reshape the flow tensor
+        expanded_flow = self._reshape_flow_tensor(flow_frames)
+        flow_out = self.flow_model(expanded_flow)
+
         return (frame_out + flow_out) / 2
 
     def fit(
@@ -541,15 +593,9 @@ class FlowCNN(nn.Module):
 
             for (frame, flow), target in train_loader:
                 flow_gpu, target_gpu = flow.to(self.flow_model.device), target.to(self.flow_model.device)
-                # flow_gpu has shape [batch_size, 2*(n_frames-1), H, W]
-                # We need to expand it to match the expected input of EarlyFusionCNN
-                # which expects [batch_size, 3*n_frames, H, W]
-                # Calculate how many times we need to repeat along the channel dimension
-                current_channels = flow_gpu.shape[1]
-                target_channels = 3 * self.flow_model.n_frames
-                repeat_factor = (target_channels + current_channels - 1) // current_channels  # Ceiling division
-                expanded_flow = flow_gpu.repeat(1, repeat_factor, 1, 1)[:, :target_channels, :, :]
-                # old: expanded_flow = flow_gpu.repeat(1, self.flow_model.n_frames-1, 1, 1)
+
+                # Use the helper method to reshape the flow tensor
+                expanded_flow = self._reshape_flow_tensor(flow_gpu)
 
                 self.flow_model.optimizer.zero_grad()
                 flow_output = self.flow_model(expanded_flow)
@@ -579,18 +625,18 @@ class FlowCNN(nn.Module):
             with torch.no_grad():
                 for (frame, flow), target in test_loader:
                     flow_gpu, target_gpu = flow.to(self.flow_model.device), target.to(self.flow_model.device)
-                    # flow_gpu has shape [batch_size, 2*(n_frames-1), H, W]
-                    # We need to expand it to match the expected input of EarlyFusionCNN
-                    current_channels = flow_gpu.shape[1]
-                    target_channels = 3 * self.flow_model.n_frames
-                    repeat_factor = (target_channels + current_channels - 1) // current_channels  # Ceiling division
-                    expanded_flow = flow_gpu.repeat(1, repeat_factor, 1, 1)[:, :target_channels, :, :]
-                    flow_output = self.flow_model(expanded_flow)
-                    # old: expanded_flow = flow_gpu.repeat(1, self.flow_model.n_frames-1, 1, 1)
 
+                    # Use the helper method to reshape the flow tensor
+                    expanded_flow = self._reshape_flow_tensor(flow_gpu)
+
+                    # Process the flow data
+                    flow_output = self.flow_model(expanded_flow)
+
+                    # Process the frame data
                     frame_gpu = frame.to(self.frame_model.device)
                     frame_output = self.frame_model(frame_gpu)
 
+                    # Average the outputs
                     avg_output = (flow_output + frame_output) / 2
                     predicted = avg_output.argmax(1)
 

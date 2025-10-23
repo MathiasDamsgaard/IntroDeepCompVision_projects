@@ -3,7 +3,7 @@
 #BSUB -q c02516
 #BSUB -gpu "num=1:mode=exclusive_process"
 #BSUB -W 02:00
-#BSUB -R "rusage[mem=4GB]"
+#BSUB -R "rusage[mem=20GB]"
 #BSUB -n 4
 #BSUB -R "span[hosts=1]"
 #BSUB -o logs/%J.out
