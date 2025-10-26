@@ -130,6 +130,7 @@ class BaselineClassifier(nn.Module):
 
         Returns:
             torch.Tensor: Softmaxed predictions with shape [batch_size, n_classes].
+
         """
         self.base_model.eval()
         data = data.to(self.device)
@@ -154,8 +155,7 @@ class EarlyFusionCNN(nn.Module):
     For example, with 3-channel frames and 10 frames, the input tensor would have 30 channels.
     """
 
-    def __init__(self, n_classes: int = 10, n_frames: int = 10, n_channels: int = 3,
-                 is_flow: bool = False) -> None:
+    def __init__(self, n_classes: int = 10, n_frames: int = 10, n_channels: int = 3, is_flow: bool = False) -> None:
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -164,9 +164,7 @@ class EarlyFusionCNN(nn.Module):
 
         # Modify the first conv layer to handle n_frames * 3 channels instead of just 3
         self.base_model.conv1.in_channels = n_channels * n_frames
-        self.base_model.conv1.weight = nn.Parameter(
-            torch.cat([self.base_model.conv1.weight] * n_frames, dim=1)
-        )
+        self.base_model.conv1.weight = nn.Parameter(torch.cat([self.base_model.conv1.weight] * n_frames, dim=1))
 
         # Replace the final fully connected layer for our classes
         self.base_model.fc = nn.Linear(self.base_model.fc.in_features, n_classes)
@@ -185,7 +183,6 @@ class EarlyFusionCNN(nn.Module):
 
         # Loss function
         self.criterion = nn.NLLLoss() if is_flow else nn.CrossEntropyLoss()
-
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass for early fusion model.
@@ -285,8 +282,8 @@ class LateFusionCNN(nn.Module):
 
         # Temporal fusion: After getting features from each frame
         self.temporal_fusion = nn.Sequential(
-            #nn.Linear(10*512*2*2, 10_000), nn.ReLU(), nn.Dropout(0.5), nn.Linear(10_000, n_classes)
-            nn.Linear(10*512*2*2, n_classes)
+            # nn.Linear(10*512*2*2, 10_000), nn.ReLU(), nn.Dropout(0.5), nn.Linear(10_000, n_classes)
+            nn.Linear(10 * 512 * 2 * 2, n_classes)
         )
 
         # Freeze backbone except last layer
@@ -376,6 +373,7 @@ class LateFusionCNN(nn.Module):
             output = self.forward(data)  # forward should return raw logits
             probs = F.softmax(output, dim=1)  # convert logits to probabilities
         return probs.cpu()
+
 
 class CNN3D(nn.Module):
     """3D CNN model for video classification.
@@ -472,17 +470,19 @@ class CNN3D(nn.Module):
         self.base_model.eval()
         data = data.to(self.device)
         with torch.no_grad():
-            output = self.base_model(data)        # raw logits
-            probs = F.softmax(output, dim=1)      # convert to probabilities
+            output = self.base_model(data)  # raw logits
+            probs = F.softmax(output, dim=1)  # convert to probabilities
         return probs.cpu()
 
+
 class FlowCNN(nn.Module):
-    def __init__(self, n_classes: int = 10, n_frames: int = 10,n_channels: int = 2,
-                 lr: float = 0.001, weight_decay: float = 0) -> None:
+    def __init__(
+        self, n_classes: int = 10, n_frames: int = 10, n_channels: int = 2, lr: float = 0.001, weight_decay: float = 0
+    ) -> None:
         super().__init__()
         self.frame_model = BaselineClassifier(n_classes=n_classes, is_flow=True)
         self.flow_model = EarlyFusionCNN(
-            n_classes=n_classes, n_frames=n_frames-1, n_channels=n_channels, is_flow=True
+            n_classes=n_classes, n_frames=n_frames - 1, n_channels=n_channels, is_flow=True
         )
         self.frame_model.optimizer = torch.optim.Adam(self.frame_model.parameters(), lr=lr, weight_decay=weight_decay)
         self.flow_model.optimizer = torch.optim.Adam(self.flow_model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -492,22 +492,20 @@ class FlowCNN(nn.Module):
 
         # Optimizer
         self.optimizer = torch.optim.Adam(
-            list(self.frame_model.parameters()) + list(self.flow_model.parameters()),
-            lr=lr, weight_decay=weight_decay)
+            list(self.frame_model.parameters()) + list(self.flow_model.parameters()), lr=lr, weight_decay=weight_decay
+        )
 
     def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
         frame, flow_frames = x
-        frame_out = self.frame_model(frame)         # logits
-        flow_out = self.flow_model(flow_frames)     # logits
+        frame_out = self.frame_model(frame)  # logits
+        flow_out = self.flow_model(flow_frames)  # logits
 
         # Convert logits to probabilities along class dimension
         frame_probs = F.softmax(frame_out, dim=1)
         flow_probs = F.softmax(flow_out, dim=1)
 
         # Average probabilities for late fusion
-        fused_probs = (frame_probs + flow_probs) / 2
-
-        return fused_probs
+        return (frame_probs + flow_probs) / 2
 
     def fit(
         self, num_epochs: int, train_loader: DataLoader, test_loader: DataLoader
@@ -534,11 +532,11 @@ class FlowCNN(nn.Module):
 
                 self.optimizer.zero_grad()
 
-                #self.flow_model.optimizer.zero_grad()
+                # self.flow_model.optimizer.zero_grad()
                 flow_output = self.flow_model(flows_gpu)
 
                 # Train frame model
-                #self.frame_model.optimizer.zero_grad()
+                # self.frame_model.optimizer.zero_grad()
                 frame_output = self.frame_model(frame_gpu)
 
                 # Combine predictions
@@ -549,15 +547,15 @@ class FlowCNN(nn.Module):
                 frame_loss = self.criterion(frame_output, target_gpu)
                 avg_loss = self.criterion(avg_output, target_gpu)
 
-                #combined_loss = flow_loss + frame_loss
-                #combined_loss.backward()
+                # combined_loss = flow_loss + frame_loss
+                # combined_loss.backward()
 
                 loss = 0.5 * avg_loss + 0.25 * (flow_loss + frame_loss)
                 loss.backward()
 
                 # Update models
-                #self.flow_model.optimizer.step()
-                #self.frame_model.optimizer.step()
+                # self.flow_model.optimizer.step()
+                # self.frame_model.optimizer.step()
                 self.optimizer.step()
 
                 # Compute training accuracy
@@ -593,10 +591,8 @@ class FlowCNN(nn.Module):
     def evaluate(self, data: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
         """Evaluate the model on given data and return softmaxed probabilities."""
         frame, flows = data
-        flow_out = self.flow_model.evaluate(flows)      # softmaxed probabilities
-        frame_out = self.frame_model.evaluate(frame)    # softmaxed probabilities
+        flow_out = self.flow_model.evaluate(flows)  # softmaxed probabilities
+        frame_out = self.frame_model.evaluate(frame)  # softmaxed probabilities
 
         # Average probabilities for late fusion
-        fused_probs = (frame_out + flow_out) / 2
-
-        return fused_probs
+        return (frame_out + flow_out) / 2

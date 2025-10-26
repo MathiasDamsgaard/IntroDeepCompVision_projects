@@ -3,14 +3,11 @@ import pickle
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import numpy as np
 import torch
-from datasets import FrameImageDataset, FrameVideoDataset, FlowImageDataset, FlowVideoDataset
+from datasets import FlowImageDataset, FlowVideoDataset, FrameImageDataset, FrameVideoDataset
 from logger import logger
-from model import CNN3D, BaselineClassifier, EarlyFusionCNN, LateFusionCNN, FlowCNN
-from scipy import stats
-from sklearn.model_selection import KFold
-from torch.utils.data import DataLoader, Subset
+from model import CNN3D, BaselineClassifier, EarlyFusionCNN, FlowCNN, LateFusionCNN
+from torch.utils.data import DataLoader
 from torchvision import transforms
 
 # Define a type for our models
@@ -74,7 +71,7 @@ def create_dataloaders(args: argparse.Namespace) -> tuple[DataLoader, DataLoader
         val_loader = DataLoader(frameimageval_dataset, batch_size=args.batch_size, shuffle=True)
         test_loader = DataLoader(framevideotest_dataset, batch_size=args.batch_size, shuffle=False)
 
-    elif args.model == "2D_CNN_late_fusion" or args.model == "2D_CNN_early_fusion":
+    elif args.model in {"2D_CNN_late_fusion", "2D_CNN_early_fusion"}:
         framevideotrain_dataset = FrameVideoDataset(
             root_dir=root_dir, split="train", transform=transform, stack_frames=False
         )
@@ -105,7 +102,7 @@ def create_dataloaders(args: argparse.Namespace) -> tuple[DataLoader, DataLoader
         val_loader = DataLoader(framevideo_val_dataset, batch_size=args.batch_size, shuffle=True)
         test_loader = DataLoader(framevideo_test_dataset, batch_size=args.batch_size, shuffle=False)
 
-    elif args.model == "Flow_CNN":        
+    elif args.model == "Flow_CNN":
         flowimagetrain_dataset = FlowImageDataset(root_dir=root_dir, split="train", transform=transform)
         flowimageval_dataset = FlowImageDataset(root_dir=root_dir, split="val", transform=transform)
         flowvideotest_dataset = FlowVideoDataset(
@@ -268,9 +265,7 @@ def main() -> tuple[float, float, float]:
 
     # Train model
     logger.info(f"Training {args.model} for {args.num_epochs} epochs...")
-    train_acc, val_acc = model.fit(
-        num_epochs=args.num_epochs, train_loader=train_loader, test_loader=val_loader
-    )
+    train_acc, val_acc = model.fit(num_epochs=args.num_epochs, train_loader=train_loader, test_loader=val_loader)
 
     # Evaluate on test set
     logger.info(f"Evaluating {args.model} on test set...")

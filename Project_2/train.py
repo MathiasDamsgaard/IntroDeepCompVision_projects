@@ -1,9 +1,9 @@
 import argparse
 
 import torch
-from datasets import FrameImageDataset, FrameVideoDataset, FlowImageDataset, FlowVideoDataset
+from datasets import FlowImageDataset, FlowVideoDataset, FrameImageDataset, FrameVideoDataset
 from logger import logger
-from model import CNN3D, FlowCNN
+from model import FlowCNN
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
@@ -84,14 +84,12 @@ if __name__ == "__main__":
 
     # Train on individual frames from the training set, validate on individual frames
     logger.info(f"Starting training for {args.num_epochs} epochs...")
-    train_acc, test_acc = model.fit(
-        num_epochs=args.num_epochs, train_loader=train_loader, test_loader=val_loader
-    )
+    train_acc, test_acc = model.fit(num_epochs=args.num_epochs, train_loader=train_loader, test_loader=val_loader)
 
     logger.info("Evaluating on test set...")
-    for batch, target in test_loader:
+    for batch, _target in test_loader:
         predictions = model.evaluate(batch)
-    
+
     # Evaluate on complete videos by averaging predictions across all frames
     n_correct = 0
     # for frames, targets in framevideotest_loader:

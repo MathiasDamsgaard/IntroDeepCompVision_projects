@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
@@ -169,9 +168,9 @@ class FlowImageDataset(FrameImageDataset):
     def load_flow_frames(self, idx: int) -> list[torch.Tensor]:
         frame_path = self.frame_paths[idx]
         flow_paths = sorted(
-            (Path(self.root_dir) / "flows_png" / self.split / frame_path.parent.parent.name / frame_path.parent.name).glob(
-                "*.png"
-            )
+            (
+                Path(self.root_dir) / "flows_png" / self.split / frame_path.parent.parent.name / frame_path.parent.name
+            ).glob("*.png")
         )
         return torch.stack([self.transform(Image.open(flow_path)) for flow_path in flow_paths])
 
