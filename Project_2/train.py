@@ -1,9 +1,9 @@
 import argparse
 
 import torch
-from datasets import FrameImageDataset, FrameVideoDataset
+from datasets import FrameImageDataset, FrameVideoDataset, FlowImageDataset, FlowVideoDataset
 from logger import logger
-from model import CNN3D
+from model import CNN3D, FlowCNN
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
@@ -12,7 +12,7 @@ logger.info("Starting training...")
 if __name__ == "__main__":
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Train a video classifier on UFC10 dataset")
-    parser.add_argument("--num_epochs", type=int, default=5, help="Number of training epochs (default: 5)")
+    parser.add_argument("--num_epochs", type=int, default=1, help="Number of training epochs (default: 1)")
     args = parser.parse_args()
 
     logger.info(f"Training configuration: {args}")
@@ -24,6 +24,7 @@ if __name__ == "__main__":
     image_size = (64, 64)
 
     root_dir = "/dtu/datasets1/02516/ufc10"
+    noleakage_dir = "/dtu/datasets1/02516/ucf101_noleakage"
 
     logger.info(f"Loading data from {root_dir}...")
 
@@ -66,13 +67,31 @@ if __name__ == "__main__":
     framevideovalstack_loader = DataLoader(framevideovalstack_dataset, batch_size=batch_size, shuffle=True)
     framevideoteststack_loader = DataLoader(framevideoteststack_dataset, batch_size=batch_size, shuffle=True)
 
-    model = CNN3D(n_classes=n_classes, n_frames=n_frames)
-
-    # Train on individual frames from the training set, validate on individual frames
-    train_acc, test_acc = model.fit(
-        num_epochs=args.num_epochs, train_loader=framevideotrainstack_loader, test_loader=framevideovalstack_loader
+    # Flow datasets
+    flowimagetrain_dataset = FlowImageDataset(root_dir=noleakage_dir, split="train", transform=transform)
+    flowimageval_dataset = FlowImageDataset(root_dir=noleakage_dir, split="val", transform=transform)
+    flowvideotest_dataset = FlowVideoDataset(
+        root_dir=noleakage_dir, split="test", transform=transform, stack_frames=False
     )
 
+    train_loader = DataLoader(flowimagetrain_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(flowimageval_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(flowvideotest_dataset, batch_size=batch_size, shuffle=True)
+
+    # Initialize model
+    logger.info("Creating model...")
+    model = FlowCNN(n_classes=n_classes, n_channels=3)
+
+    # Train on individual frames from the training set, validate on individual frames
+    logger.info(f"Starting training for {args.num_epochs} epochs...")
+    train_acc, test_acc = model.fit(
+        num_epochs=args.num_epochs, train_loader=train_loader, test_loader=val_loader
+    )
+
+    logger.info("Evaluating on test set...")
+    for batch, target in test_loader:
+        predictions = model.evaluate(batch)
+    
     # Evaluate on complete videos by averaging predictions across all frames
     n_correct = 0
     # for frames, targets in framevideotest_loader:

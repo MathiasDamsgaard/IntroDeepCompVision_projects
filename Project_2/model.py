@@ -1,16 +1,18 @@
 import torch
 from torch import nn
+from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torchvision.models import ResNet18_Weights, resnet18
 from torchvision.models.video import R3D_18_Weights, r3d_18
 
 
 class BaselineClassifier(nn.Module):
-    def __init__(self, n_classes: int = 10) -> None:
+    def __init__(self, n_classes: int = 10, is_flow: bool = False) -> None:
         """Initialize the VideoClassifier with a pretrained ResNet18 backbone.
 
         Args:
             n_classes (int): Number of output classes for classification. Default is 10.
+            is_flow (bool): Whether the model is used in optical flow task. Default is False.
 
         The model uses transfer learning with a frozen ResNet18 backbone and only
         trains the final fully connected layer for the specific classification task.
@@ -37,8 +39,8 @@ class BaselineClassifier(nn.Module):
             filter(lambda p: p.requires_grad, self.base_model.parameters()), lr=1e-3, weight_decay=1e-2
         )
 
-        # CrossEntropyLoss expects raw logits (not softmax outputs)
-        self.criterion = nn.CrossEntropyLoss()
+        # Loss function
+        self.criterion = nn.NLLLoss() if is_flow else nn.CrossEntropyLoss()
 
     def fit(
         self, num_epochs: int, train_loader: DataLoader, test_loader: DataLoader
@@ -112,30 +114,37 @@ class BaselineClassifier(nn.Module):
         """Forward pass for the baseline classifier.
 
         Args:
-            x (torch.Tensor): Input tensor of shape [batch_size, C, H, W]
+            x (torch.Tensor): Input tensor of shape [T, C, H, W]
 
         Returns:
-            torch.Tensor: Output tensor of shape [batch_size, n_classes]
+            torch.Tensor: Output tensor of shape [T, n_classes]
 
         """
         return self.base_model(x.to(self.device))
 
     def evaluate(self, data: torch.Tensor) -> torch.Tensor:
-        """Evaluate the model on given data and return raw logits.
+        """Evaluate the model on given data and return softmaxed predictions.
 
         Args:
             data (torch.Tensor): Input batch of images with shape [batch_size, C, H, W].
 
         Returns:
-            torch.Tensor: Raw logits (unnormalized predictions) with shape [batch_size, n_classes].
-                         Apply softmax to convert to probabilities, or argmax to get class predictions.
-
+            torch.Tensor: Softmaxed predictions with shape [batch_size, n_classes].
         """
         self.base_model.eval()
         data = data.to(self.device)
-        with torch.no_grad():
-            output = self.base_model(data)  # Returns logits (no softmax)
-        return output.cpu()
+        predictions = []
+
+        for frames in data:
+            with torch.no_grad():
+                output = self.base_model(frames)
+                # Convert logits to probabilities along the class dimension
+                probs = F.softmax(output, dim=1)
+                # Average across temporal or clip dimension if multiple predictions per sample
+                mean_probs = probs.mean(dim=0)
+            predictions.append(mean_probs.cpu())
+
+        return torch.stack(predictions)
 
 
 class EarlyFusionCNN(nn.Module):
@@ -145,38 +154,44 @@ class EarlyFusionCNN(nn.Module):
     For example, with 3-channel frames and 10 frames, the input tensor would have 30 channels.
     """
 
-    def __init__(self, n_classes: int = 10, n_frames: int = 10) -> None:
+    def __init__(self, n_classes: int = 10, n_frames: int = 10, n_channels: int = 3,
+                 is_flow: bool = False) -> None:
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.n_frames = n_frames
 
         # Modified ResNet with expanded input channels to accommodate stacked frames
         self.base_model = resnet18(weights=ResNet18_Weights.DEFAULT)
 
         # Modify the first conv layer to handle n_frames * 3 channels instead of just 3
-        original_conv1 = self.base_model.conv1
-        self.base_model.conv1 = nn.Conv2d(
-            in_channels=3 * n_frames,  # 3 channels per frame * number of frames
-            out_channels=original_conv1.out_channels,
-            kernel_size=original_conv1.kernel_size[0],
-            stride=original_conv1.stride[0],
-            padding=original_conv1.padding[0],
-            bias=(original_conv1.bias is not None),
+        self.base_model.conv1.in_channels = n_channels * n_frames
+        self.base_model.conv1.weight = nn.Parameter(
+            torch.cat([self.base_model.conv1.weight] * n_frames, dim=1)
         )
 
         # Replace the final fully connected layer for our classes
         self.base_model.fc = nn.Linear(self.base_model.fc.in_features, n_classes)
         self.base_model.to(self.device)
 
-        # Optimizer and loss
-        self.optimizer = torch.optim.Adam(self.base_model.parameters(), lr=1e-3, weight_decay=1e-2)
-        self.criterion = nn.CrossEntropyLoss()
+        # Freeze backbone (all layers except the final fc layer)
+        # Only train the final classification layer
+        for name, param in self.base_model.named_parameters():
+            if not name.startswith("fc"):
+                param.requires_grad = False
+
+        # Optimizer on trainable parameters only (just the fc layer)
+        self.optimizer = torch.optim.Adam(
+            filter(lambda p: p.requires_grad, self.base_model.parameters()), lr=1e-3, weight_decay=1e-2
+        )
+
+        # Loss function
+        self.criterion = nn.NLLLoss() if is_flow else nn.CrossEntropyLoss()
+
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass for early fusion model.
 
         Args:
-            x: Tensor of shape [batch_size, n_frames, C, H, W] or [batch_size, C, n_frames, H, W]
+            x: Tensor of shape [batch_size, T, C, H, W]
                depending on how the frames are stacked
 
         Returns:
@@ -186,18 +201,11 @@ class EarlyFusionCNN(nn.Module):
         # Make sure the input is on the same device as the model
         x = x.to(self.device)
 
-        if x.dim() == 5:  # noqa: PLR2004 # [batch_size, C, n_frames, H, W]
-            # Check the shape to determine the dimension ordering
-            if x.shape[1] == self.n_frames or x.shape[1] < x.shape[2]:
-                # [batch_size, n_frames, C, H, W] format
-                batch_size, n_frames, c, h, w = x.shape
-                # Reshape to [batch_size, n_frames*C, H, W]
-                x = x.view(batch_size, n_frames * c, h, w)
-            else:
-                # [batch_size, C, n_frames, H, W] format
-                batch_size, c, n_frames, h, w = x.shape
-                # Reshape to [batch_size, C*n_frames, H, W]
-                x = x.view(batch_size, c * n_frames, h, w)
+        # [batch_size, T, C, H, W] format
+        batch_size, t, c, h, w = x.shape
+
+        # Reshape to [batch_size, T * C, H, W]
+        x = x.reshape(batch_size, t * c, h, w)
 
         return self.base_model(x)
 
@@ -218,17 +226,10 @@ class EarlyFusionCNN(nn.Module):
             total_train_samples = 0
 
             for data, target in train_loader:
-                # For FrameImageDataset, each frame is [batch_size, 3, H, W]
-                # But EarlyFusionCNN expects [batch_size, n_frames*3, H, W]
-                # We'll duplicate the frame to match the expected input size
                 data_gpu, target_gpu = data.to(self.device), target.to(self.device)
 
-                # Create a modified input by repeating the same frame n_frames times
-                # Create input with the right shape by repeating the frame
-                expanded_data = data_gpu.repeat(1, self.n_frames, 1, 1)
-
                 self.optimizer.zero_grad()
-                output = self.base_model(expanded_data)
+                output = self.forward(data_gpu)
                 loss = self.criterion(output, target_gpu)
                 loss.backward()
                 self.optimizer.step()
@@ -245,11 +246,7 @@ class EarlyFusionCNN(nn.Module):
             with torch.no_grad():
                 for data, target in test_loader:
                     data_gpu, target_gpu = data.to(self.device), target.to(self.device)
-
-                    # Create a modified input by repeating the same frame n_frames times
-                    expanded_data = data_gpu.repeat(1, self.n_frames, 1, 1)
-
-                    output = self.base_model(expanded_data)
+                    output = self.forward(data_gpu)
                     predicted = output.argmax(1)
                     test_correct += (predicted == target_gpu).sum().cpu().item()
                     total_test_samples += target_gpu.size(0)
@@ -260,12 +257,13 @@ class EarlyFusionCNN(nn.Module):
         return train_acc, test_acc
 
     def evaluate(self, data: torch.Tensor) -> torch.Tensor:
-        """Evaluate the model on given data and return raw logits."""
+        """Evaluate the model on given data and return softmaxed probabilities."""
         self.base_model.eval()
         data = data.to(self.device)
         with torch.no_grad():
-            output = self.base_model(data)
-        return output.cpu()
+            output = self.forward(data)
+            probs = F.softmax(output, dim=1)
+        return probs.cpu()
 
 
 class LateFusionCNN(nn.Module):
@@ -282,34 +280,25 @@ class LateFusionCNN(nn.Module):
         # Frame feature extractor using pretrained ResNet18
         self.base_model = resnet18(weights=ResNet18_Weights.DEFAULT)
 
-        # Remove the final classification layer, keeping the feature extractor
-        self.feature_size = self.base_model.fc.in_features  # Usually 512 for ResNet18
-        # self.base_model.fc = nn.Identity()  # Replace with Identity to get features
         # Use a Linear layer that behaves like Identity (satisfies type checker)
-        self.base_model.fc = nn.Linear(self.feature_size, self.feature_size)
-        # Initialize as identity matrix
-        with torch.no_grad():
-            self.base_model.fc.weight.copy_(torch.eye(self.feature_size))
-            self.base_model.fc.bias.zero_()
+        self.base_model = nn.Sequential(*list(self.base_model.children())[:-2])
 
         # Temporal fusion: After getting features from each frame
         self.temporal_fusion = nn.Sequential(
-            nn.Linear(self.feature_size, 256), nn.ReLU(), nn.Dropout(0.5), nn.Linear(256, n_classes)
+            #nn.Linear(10*512*2*2, 10_000), nn.ReLU(), nn.Dropout(0.5), nn.Linear(10_000, n_classes)
+            nn.Linear(10*512*2*2, n_classes)
         )
 
         # Freeze backbone except last layer
-        for name, param in self.base_model.named_parameters():
-            if "layer4" not in name:  # Only fine-tune last conv block
-                param.requires_grad = False
+        for _, param in self.base_model.named_parameters():
+            param.requires_grad = False
 
         # Move to device
         self.base_model.to(self.device)
         self.temporal_fusion.to(self.device)
 
         # Optimizer and loss
-        trainable_params = list(self.temporal_fusion.parameters()) + list(
-            filter(lambda p: p.requires_grad, self.base_model.parameters())
-        )
+        trainable_params = list(self.temporal_fusion.parameters())
         self.optimizer = torch.optim.Adam(trainable_params, lr=1e-3, weight_decay=1e-2)
         self.criterion = nn.CrossEntropyLoss()
 
@@ -323,45 +312,34 @@ class LateFusionCNN(nn.Module):
             Tensor of shape [batch_size, n_classes] containing class logits
 
         """
-        _batch_size = x[0].size(0)
-
         # Extract features from each frame
-        frame_features = []
-        for frame in x:
-            features = self.base_model(frame.to(self.device))  # [batch_size, feature_size]
-            frame_features.append(features)
-
-        # Average the features across frames
-        avg_features = torch.stack(frame_features).mean(dim=0)  # [batch_size, feature_size]
+        outputs = []
+        for frames in x:
+            frames_gpu = frames.to(self.device)
+            features = self.base_model(frames_gpu)
+            features = torch.flatten(features)
+            outputs.append(self.temporal_fusion(features))
 
         # Final classification
-        return self.temporal_fusion(avg_features)
+        return torch.stack(outputs)
 
     def fit(
         self, num_epochs: int, train_loader: DataLoader, test_loader: DataLoader
     ) -> tuple[list[float], list[float]]:
         """Train the model on the training set and evaluate on validation set."""
         train_acc, test_acc = [], []
+        self.base_model.eval()
 
         for _ in range(num_epochs):
             # Training phase
-            self.base_model.train()
             self.temporal_fusion.train()
             train_correct = 0
             total_train_samples = 0
 
-            for data, targets in train_loader:
-                # For FrameImageDataset, each item is a single frame, not a list of frames
-                # So we need to handle it differently than in the forward() method
+            for batch, targets in train_loader:
                 targets_gpu = targets.to(self.device)
-                data_gpu = data.to(self.device)
-
                 self.optimizer.zero_grad()
-
-                # Process single frame directly with base_model
-                features = self.base_model(data_gpu)
-                outputs = self.temporal_fusion(features)
-
+                outputs = self.forward(batch)
                 loss = self.criterion(outputs, targets_gpu)
                 loss.backward()
                 self.optimizer.step()
@@ -371,19 +349,15 @@ class LateFusionCNN(nn.Module):
                 total_train_samples += targets.size(0)
 
             # Validation phase
-            self.base_model.eval()
             self.temporal_fusion.eval()
             test_correct = 0
             total_test_samples = 0
 
             with torch.no_grad():
-                for data, targets in test_loader:
-                    data_gpu = data.to(self.device)
+                for batch, targets in test_loader:
                     targets_gpu = targets.to(self.device)
 
-                    # Process single frame directly with base_model
-                    features = self.base_model(data_gpu)
-                    outputs = self.temporal_fusion(features)
+                    outputs = self.forward(batch)
 
                     predicted = outputs.argmax(1)
                     test_correct += (predicted == targets_gpu).sum().cpu().item()
@@ -395,13 +369,13 @@ class LateFusionCNN(nn.Module):
         return train_acc, test_acc
 
     def evaluate(self, data: list[torch.Tensor]) -> torch.Tensor:
-        """Evaluate the model on given data and return raw logits."""
+        """Evaluate the model on given data and return softmaxed probabilities for late fusion."""
         self.base_model.eval()
         self.temporal_fusion.eval()
         with torch.no_grad():
-            output = self.forward(data)
-        return output.cpu()
-
+            output = self.forward(data)  # forward should return raw logits
+            probs = F.softmax(output, dim=1)  # convert logits to probabilities
+        return probs.cpu()
 
 class CNN3D(nn.Module):
     """3D CNN model for video classification.
@@ -410,11 +384,9 @@ class CNN3D(nn.Module):
     spatial and temporal information in videos.
     """
 
-    def __init__(self, n_classes: int = 10, n_frames: int = 10) -> None:
+    def __init__(self, n_classes: int = 10) -> None:
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.n_frames = n_frames
-        self.n_classes = n_classes
 
         # Load pretrained 3D ResNet-18
         self.base_model = r3d_18(weights=R3D_18_Weights.DEFAULT)
@@ -496,9 +468,135 @@ class CNN3D(nn.Module):
         return train_acc, test_acc
 
     def evaluate(self, data: torch.Tensor) -> torch.Tensor:
-        """Evaluate the model on given data and return raw logits."""
+        """Evaluate the model on given data and return softmaxed probabilities."""
         self.base_model.eval()
         data = data.to(self.device)
         with torch.no_grad():
-            output = self.base_model(data)
-        return output.cpu()
+            output = self.base_model(data)        # raw logits
+            probs = F.softmax(output, dim=1)      # convert to probabilities
+        return probs.cpu()
+
+class FlowCNN(nn.Module):
+    def __init__(self, n_classes: int = 10, n_frames: int = 10,n_channels: int = 2,
+                 lr: float = 0.001, weight_decay: float = 0) -> None:
+        super().__init__()
+        self.frame_model = BaselineClassifier(n_classes=n_classes, is_flow=True)
+        self.flow_model = EarlyFusionCNN(
+            n_classes=n_classes, n_frames=n_frames-1, n_channels=n_channels, is_flow=True
+        )
+        self.frame_model.optimizer = torch.optim.Adam(self.frame_model.parameters(), lr=lr, weight_decay=weight_decay)
+        self.flow_model.optimizer = torch.optim.Adam(self.flow_model.parameters(), lr=lr, weight_decay=weight_decay)
+
+        # Loss function
+        self.criterion = nn.NLLLoss()
+
+        # Optimizer
+        self.optimizer = torch.optim.Adam(
+            list(self.frame_model.parameters()) + list(self.flow_model.parameters()),
+            lr=lr, weight_decay=weight_decay)
+
+    def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        frame, flow_frames = x
+        frame_out = self.frame_model(frame)         # logits
+        flow_out = self.flow_model(flow_frames)     # logits
+
+        # Convert logits to probabilities along class dimension
+        frame_probs = F.softmax(frame_out, dim=1)
+        flow_probs = F.softmax(flow_out, dim=1)
+
+        # Average probabilities for late fusion
+        fused_probs = (frame_probs + flow_probs) / 2
+
+        return fused_probs
+
+    def fit(
+        self, num_epochs: int, train_loader: DataLoader, test_loader: DataLoader
+    ) -> tuple[list[float], list[float]]:
+        """Train the model on the training set and evaluate on validation set.
+
+        Similar to VideoClassifier.fit but expects frames to be stacked along channel dimension.
+        """
+        train_acc, test_acc = [], []
+        self.frame_model.to(self.frame_model.device)
+        self.flow_model.to(self.flow_model.device)
+
+        for _ in range(num_epochs):
+            # Training phase
+            self.frame_model.train()
+            self.flow_model.train()
+            train_correct = 0
+            total_train_samples = 0
+
+            for (frame, flows), target in train_loader:
+                # Train flow model
+                flows_gpu, target_gpu = flows.to(self.flow_model.device), target.to(self.flow_model.device)
+                frame_gpu = frame.to(self.frame_model.device)
+
+                self.optimizer.zero_grad()
+
+                #self.flow_model.optimizer.zero_grad()
+                flow_output = self.flow_model(flows_gpu)
+
+                # Train frame model
+                #self.frame_model.optimizer.zero_grad()
+                frame_output = self.frame_model(frame_gpu)
+
+                # Combine predictions
+                avg_output = (F.log_softmax(flow_output, dim=1) + F.log_softmax(frame_output, dim=1)) / 2
+
+                # Compute losses
+                flow_loss = self.criterion(flow_output, target_gpu)
+                frame_loss = self.criterion(frame_output, target_gpu)
+                avg_loss = self.criterion(avg_output, target_gpu)
+
+                #combined_loss = flow_loss + frame_loss
+                #combined_loss.backward()
+
+                loss = 0.5 * avg_loss + 0.25 * (flow_loss + frame_loss)
+                loss.backward()
+
+                # Update models
+                #self.flow_model.optimizer.step()
+                #self.frame_model.optimizer.step()
+                self.optimizer.step()
+
+                # Compute training accuracy
+                predicted = avg_output.argmax(1)
+                train_correct += (predicted == target_gpu).sum().cpu().item()
+                total_train_samples += target_gpu.size(0)
+
+            # Validation phase
+            self.frame_model.eval()
+            self.flow_model.eval()
+            test_correct = 0
+            total_test_samples = 0
+
+            with torch.no_grad():
+                for (frame, flows), target in test_loader:
+                    flows_gpu, target_gpu = flows.to(self.flow_model.device), target.to(self.flow_model.device)
+                    flow_output = self.flow_model(flows_gpu)
+
+                    frame_gpu = frame.to(self.frame_model.device)
+                    frame_output = self.frame_model(frame_gpu)
+
+                    avg_output = (F.softmax(flow_output, dim=1) + F.softmax(frame_output, dim=1)) / 2
+                    predicted = avg_output.argmax(1)
+
+                    test_correct += (predicted == target_gpu).sum().cpu().item()
+                    total_test_samples += target_gpu.size(0)
+
+            train_acc.append(train_correct / total_train_samples)
+            test_acc.append(test_correct / total_test_samples)
+
+        return train_acc, test_acc
+
+    def evaluate(self, data: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        """Evaluate the model on given data and return softmaxed probabilities."""
+        frame, flows = data
+        flow_out = self.flow_model.evaluate(flows)      # softmaxed probabilities
+        frame_out = self.frame_model.evaluate(frame)    # softmaxed probabilities
+
+        # Average probabilities for late fusion
+        fused_probs = (frame_out + flow_out) / 2
+
+        return fused_probs
