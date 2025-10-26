@@ -269,7 +269,7 @@ def main() -> tuple[float, float, float]:
 
     # Evaluate on test set
     logger.info(f"Evaluating {args.model} on test set...")
-    test_acc = evaluate_on_videos(model, test_loader, args.model)
+    test_acc = evaluate_on_videos(model, test_loader)
 
     # Save results
     logger.info("Saving results...")

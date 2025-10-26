@@ -282,7 +282,6 @@ class LateFusionCNN(nn.Module):
 
         # Temporal fusion: After getting features from each frame
         self.temporal_fusion = nn.Sequential(
-            # nn.Linear(10*512*2*2, 10_000), nn.ReLU(), nn.Dropout(0.5), nn.Linear(10_000, n_classes)
             nn.Linear(10 * 512 * 2 * 2, n_classes)
         )
 

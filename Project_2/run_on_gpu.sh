@@ -1,5 +1,5 @@
 #!/bin/bash
-#BSUB -J aggr
+#BSUB -J flow_noleak
 #BSUB -q c02516
 #BSUB -gpu "num=1:mode=exclusive_process"
 #BSUB -W 02:00
@@ -13,14 +13,14 @@
 mkdir -p logs
 
 # Default model parameters
-MODEL="2D_CNN_aggr"
+MODEL="Flow_CNN"
 NUM_EPOCHS=10
 BATCH_SIZE=8
 IMAGE_SIZE=64
 OUTPUT_DIR="./outputs"
 SAVE_MODEL=""  # Empty means don't save
 ROOT_DIR="/dtu/datasets1/02516/" # ufc10 or ucf101_noleakage
-NO_LEAKAGE="" # Empty means leakage
+NO_LEAKAGE="--no_leakage" # Empty means leakage
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
