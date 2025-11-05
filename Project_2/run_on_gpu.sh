@@ -14,9 +14,9 @@ mkdir -p logs
 
 # Default model parameters
 MODEL="Flow_CNN"
-NUM_EPOCHS=10
-BATCH_SIZE=8
-IMAGE_SIZE=64
+NUM_EPOCHS=5
+BATCH_SIZE=3
+IMAGE_SIZE=224
 OUTPUT_DIR="./outputs"
 SAVE_MODEL=""  # Empty means don't save
 ROOT_DIR="/dtu/datasets1/02516/" # ufc10 or ucf101_noleakage

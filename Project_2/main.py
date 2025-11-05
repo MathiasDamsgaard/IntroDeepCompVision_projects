@@ -53,7 +53,15 @@ def create_dataloaders(args: argparse.Namespace) -> tuple[DataLoader, DataLoader
     For 3D_CNN, we use FrameVideoDataset with stack_frames=True to get [C, T, H, W] per sample.
     For 2D models, we keep training/val on individual frames and test on lists of frames.
     """
-    transform = transforms.Compose([transforms.Resize((args.image_size, args.image_size)), transforms.ToTensor()])
+    imagenet_mean = [0.485, 0.456, 0.406]
+    imagenet_std = [0.229, 0.224, 0.225]
+    transform = transforms.Compose(
+        [
+            transforms.Resize((args.image_size, args.image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(imagenet_mean, imagenet_std),
+        ]
+    )
 
     root_path = Path(args.root_dir)
     root_path = root_path / "ucf101_noleakage" if args.no_leakage else root_path / "ufc10"
