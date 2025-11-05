@@ -9,25 +9,25 @@ class EncDec(nn.Module):
         # encoder (downsampling)
         self.enc_conv0 = nn.Conv2d(3, 64, 3, padding=1)
         self.pool0 = nn.MaxPool2d(2, 2)  # 128 -> 64
-        self.enc_conv1 = nn.Conv2d(64, 64, 3, padding=1)
+        self.enc_conv1 = nn.Conv2d(64, 128, 3, padding=1)
         self.pool1 = nn.MaxPool2d(2, 2)  # 64 -> 32
-        self.enc_conv2 = nn.Conv2d(64, 64, 3, padding=1)
+        self.enc_conv2 = nn.Conv2d(128, 256, 3, padding=1)
         self.pool2 = nn.MaxPool2d(2, 2)  # 32 -> 16
-        self.enc_conv3 = nn.Conv2d(64, 64, 3, padding=1)
+        self.enc_conv3 = nn.Conv2d(256, 512, 3, padding=1)
         self.pool3 = nn.MaxPool2d(2, 2)  # 16 -> 8
 
         # bottleneck
-        self.bottleneck_conv = nn.Conv2d(64, 64, 3, padding=1)
+        self.bottleneck_conv = nn.Conv2d(512, 1024, 3, padding=1)
 
         # decoder (upsampling)
         self.upsample0 = nn.Upsample(16)  # 8 -> 16
-        self.dec_conv0 = nn.Conv2d(64, 64, 3, padding=1)
+        self.dec_conv0 = nn.Conv2d(1024, 512, 3, padding=1)
         self.upsample1 = nn.Upsample(32)  # 16 -> 32
-        self.dec_conv1 = nn.Conv2d(64, 64, 3, padding=1)
+        self.dec_conv1 = nn.Conv2d(512, 256, 3, padding=1)
         self.upsample2 = nn.Upsample(64)  # 32 -> 64
-        self.dec_conv2 = nn.Conv2d(64, 64, 3, padding=1)
+        self.dec_conv2 = nn.Conv2d(256, 128, 3, padding=1)
         self.upsample3 = nn.Upsample(128)  # 64 -> 128
-        self.dec_conv3 = nn.Conv2d(64, 1, 3, padding=1)
+        self.dec_conv3 = nn.Conv2d(128, 1, 3, padding=1)
 
     def forward(self, x):
         # encoder

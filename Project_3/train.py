@@ -7,6 +7,7 @@ from model.EncDecModel import EncDec
 from model.UNetModel import UNet
 from torch import optim
 from torch.utils.data import DataLoader
+from torchsummary import summary
 from torchvision import transforms
 
 # Dataset
@@ -15,13 +16,18 @@ train_transform = transforms.Compose([transforms.Resize((size, size)), transform
 test_transform = transforms.Compose([transforms.Resize((size, size)), transforms.ToTensor()])
 
 batch_size = 6
+workers = 3
 trainset = Drive(train=True, transform=train_transform)
-train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=3)
+train_full_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=workers)
 testset = Drive(train=False, transform=test_transform)
-test_loader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=3)
-# IMPORTANT NOTE: There is no validation set provided here, but don't forget to
-# have one for the project
+test_loader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=workers)
 
+# Validation setup - split from training set
+val_size = int(0.2 * len(trainset))
+train_size = len(trainset) - val_size
+train_subset, val_subset = torch.utils.data.random_split(trainset, [train_size, val_size])
+train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=workers)
+val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=workers)
 
 # Training setup
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -32,9 +38,9 @@ models = {
 }
 model = models["EncDec"]().to(device)
 
-# summary(model, (3, 256, 256))
+summary(model, (3, 256, 256))
 learning_rate = 0.001
-opt = optim.Adam(model.parameters(), learning_rate)
+optimizer = optim.Adam(model.parameters(), learning_rate)
 
 loss_fns = {
     "BCELoss": BCELoss,
@@ -47,18 +53,18 @@ loss_fn = loss_fns["BCELoss"]()
 epochs = 20
 
 # Training loop
-X_test, Y_test = next(iter(test_loader))
-model.train()  # train mode
 for _epoch in range(epochs):
     tic = time()
 
-    avg_loss = 0
+    # Training phase
+    model.train()
+    train_loss = 0
     for X_batch, y_true in train_loader:
         X_batch = X_batch.to(device)
         y_true = y_true.to(device)
 
         # set parameter gradients to zero
-        opt.zero_grad()
+        optimizer.zero_grad()
 
         # forward
         y_pred = model(X_batch)
@@ -66,15 +72,24 @@ for _epoch in range(epochs):
         # and whether it makes sense to apply sigmoid or softmax.
         loss = loss_fn(y_pred, y_true)  # forward-pass
         loss.backward()  # backward-pass
-        opt.step()  # update weights
+        optimizer.step()  # update weights
 
         # calculate metrics to show the user
-        avg_loss += loss / len(train_loader)
+        train_loss += loss.item() / len(train_loader)
 
-    # IMPORTANT NOTE: It is a good practice to check performance on a
-    # validation set after each epoch.
-    # model.eval()  # testing mode
-    # Y_hat = F.sigmoid(model(X_test.to(device))).detach().cpu()
+    # Validation phase
+    model.eval()
+    val_loss = 0
+    with torch.no_grad():
+        for X_batch, y_true in val_loader:
+            X_batch = X_batch.to(device)
+            y_true = y_true.to(device)
+
+            y_pred = model(X_batch)
+            loss = loss_fn(y_pred, y_true)
+            val_loss += loss.item() / len(val_loader)
+
+    toc = time()
 
 # Save the model
 torch.save(model.state_dict(), "model/checkpoints/encdec.pth")
