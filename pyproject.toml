@@ -17,6 +17,7 @@ dependencies = [
   "pandas>=2.3.3",
   "pillow>=11.3",
   "torch>=2.8",
+  "torchsummary>=1.5.1",
   "torchvision>=0.23",
   "tqdm>=4.67.1",
 ]
