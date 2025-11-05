@@ -9,6 +9,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 from torchsummary import summary
 from torchvision import transforms
+from tqdm import tqdm
 
 # Dataset
 size = 128
@@ -53,7 +54,7 @@ loss_fn = loss_fns["BCELoss"]()
 epochs = 20
 
 # Training loop
-for _epoch in range(epochs):
+for _epoch in tqdm(range(epochs)):
     tic = time()
 
     # Training phase
@@ -82,14 +83,14 @@ for _epoch in range(epochs):
     val_loss = 0
     with torch.no_grad():
         for X_batch, y_true in val_loader:
-            X_batch = X_batch.to(device)
-            y_true = y_true.to(device)
+            X_batch_gpu = X_batch.to(device)
+            y_true_gpu = y_true.to(device)
 
-            y_pred = model(X_batch)
-            loss = loss_fn(y_pred, y_true)
+            y_pred = model(X_batch_gpu)
+            loss = loss_fn(y_pred, y_true_gpu)
             val_loss += loss.item() / len(val_loader)
 
     toc = time()
 
 # Save the model
-torch.save(model.state_dict(), "model/checkpoints/encdec.pth")
+torch.save(model.state_dict(), "Project_3/model/checkpoints/encdec.pth")
