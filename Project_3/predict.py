@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 
 
-def save_mask(array, path) -> None:
+def save_mask(array: np.ndarray, path: str) -> None:
     # array should be a 2D numpy array with 0s and 1s
     # np.unique(array) == [0, 1]
     # len(np.shape(array)) == 2

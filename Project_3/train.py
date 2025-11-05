@@ -60,17 +60,17 @@ for _epoch in range(epochs):
     model.train()
     train_loss = 0
     for X_batch, y_true in train_loader:
-        X_batch = X_batch.to(device)
-        y_true = y_true.to(device)
+        X_batch_gpu = X_batch.to(device)
+        y_true_gpu = y_true.to(device)
 
         # set parameter gradients to zero
         optimizer.zero_grad()
 
-        # forward
-        y_pred = model(X_batch)
+        # forward + backward + optimize
+        y_pred = model(X_batch_gpu)
         # IMPORTANT NOTE: Check whether y_pred is normalized or unnormalized
         # and whether it makes sense to apply sigmoid or softmax.
-        loss = loss_fn(y_pred, y_true)  # forward-pass
+        loss = loss_fn(y_pred, y_true_gpu)  # forward-pass
         loss.backward()  # backward-pass
         optimizer.step()  # update weights
 
