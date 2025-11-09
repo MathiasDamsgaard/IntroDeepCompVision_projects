@@ -13,11 +13,13 @@ class Ph2(torch.utils.data.Dataset):
         """Initialize the dataset."""
         self.transform = transform
         data_path = Path(DATA_PATH)
-        all_paths = sorted(Path.glob(data_path, "/*"))
+        # Use glob on the Path object instead of Path.glob() for Python 3.13 compatibility
+        all_paths = sorted(data_path.glob("*"))
         self.image_paths = []
         self.lesion_paths = []
         for path in all_paths:
-            paths = sorted(Path.glob(path, "/*/*.bmp"))
+            # Use glob on the path object directly
+            paths = sorted(path.glob("*/*.bmp"))
             for p in paths:
                 if "Dermoscopic_Image" in str(p):
                     self.image_paths.append(p)
