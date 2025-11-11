@@ -68,3 +68,35 @@ class WeightedCrossEntropyLoss(nn.Module):
         weighted_loss = (1 - y_true) * loss + y_true * pos_weight * loss
 
         return torch.mean(weighted_loss)
+
+
+
+
+class PointBCELoss(nn.Module):
+    """
+    Binary Cross Entropy loss that is only calculated at specific point locations.
+    """
+    def __init__(self) -> None:
+        super().__init__()
+        # Use BCEWithLogitsLoss because it's numerically stable and takes raw model outputs (logits)
+        self.bce_loss = nn.BCEWithLogitsLoss(reduction='mean')
+
+    def forward(self, y_pred: torch.Tensor, y_clicks: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            y_pred (torch.Tensor): The model's output prediction map. Shape [B, 1, H, W].
+            y_clicks (torch.Tensor): The click mask with 1s, 0s, and ignore values. Shape [B, 1, H, W].
+        """
+        # Find the locations of the clicks (where the mask is not the ignore value)
+        active_pixels = (y_clicks != -100)
+
+        # If there are no clicks in the batch, return a loss of 0
+        if not active_pixels.any():
+            return torch.tensor(0.0, device=y_pred.device, requires_grad=True)
+
+        # Select only the predictions and labels at the click locations
+        pred_clicks = y_pred[active_pixels]
+        true_clicks = y_clicks[active_pixels]
+
+        # Calculate the BCE loss on only these points
+        return self.bce_loss(pred_clicks, true_clicks.float())

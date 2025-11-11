@@ -5,6 +5,8 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
+from utils import generate_clicks 
+
 DATA_PATH = "/dtu/datasets1/02516/PH2_Dataset_images"
 
 
@@ -40,3 +42,31 @@ class Ph2(torch.utils.data.Dataset):
         y = self.transform(lesion)
         x = self.transform(image)
         return x, y
+
+
+
+
+
+class WeaklySupervisedPh2(Ph2):
+    """
+    A version of the Ph2 dataset that returns simulated clicks instead of full masks.
+    """
+    def __init__(self, transform, num_pos_clicks=10, num_neg_clicks=10):
+        # Initialize the parent Ph2 class
+        super().__init__(transform=transform)
+        self.num_pos_clicks = num_pos_clicks
+        self.num_neg_clicks = num_neg_clicks
+
+    def __getitem__(self, idx):
+        # Get the original image and the full mask from the parent class
+        image, full_mask = super().__getitem__(idx)
+        
+        # Now, generate the click mask from the full mask
+        click_mask = generate_clicks(
+            full_mask, 
+            num_pos_clicks=self.num_pos_clicks, 
+            num_neg_clicks=self.num_neg_clicks
+        )
+        
+        # Return the image and the click_mask (instead of the full_mask)
+        return image, click_mask
