@@ -40,7 +40,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--image_size", type=int, default=64, help="Image size for resizing (square)")
 
     # Output and checkpointing
-    parser.add_argument("--output_dir", type=str, default="./outputs", help="Directory to save model outputs")
+    parser.add_argument("--output_dir", type=str, default="./Project_2/outputs", help="Directory to save model outputs")
     parser.add_argument("--save_model", action="store_true", help="Whether to save the trained model")
     parser.add_argument("--no_leakage", action="store_true", help="Whether to use no-leakage dataset version")
 
