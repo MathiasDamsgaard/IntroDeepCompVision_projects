@@ -2,11 +2,11 @@
 # Calculates: Dice, IoU, Accuracy, Sensitivity, Specificity
 
 import argparse
-import json
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
+
+NUM_PARTS = 3
 
 
 def calculate_metrics(pred: np.ndarray, gt: np.ndarray, eps: float = 1e-7) -> dict:
@@ -52,10 +52,67 @@ def calculate_metrics(pred: np.ndarray, gt: np.ndarray, eps: float = 1e-7) -> di
         "accuracy": accuracy,
         "sensitivity": sensitivity,
         "specificity": specificity,
-        "tp": tp,
-        "tn": tn,
-        "fp": fp,
-        "fn": fn,
+    }
+
+
+def parse_experiment_name(pred_dir: str) -> dict:
+    """Parse experiment name to extract dataset, model, and loss."""
+    name = Path(pred_dir).name
+    parts = name.split("_")
+
+    if len(parts) >= NUM_PARTS:
+        return {
+            "dataset": parts[0].capitalize(),
+            "model": parts[1].capitalize(),
+            "loss": "_".join(parts[2:]).capitalize(),
+        }
+    return {"dataset": "Unknown", "model": "Unknown", "loss": "Unknown"}
+
+
+def measure_single(pred_dir: str) -> dict:
+    """Measure metrics for a single prediction directory."""
+    pred_dir = Path(pred_dir)
+    pred_path = pred_dir / "predictions.npy"
+    gt_path = pred_dir / "ground_truths.npy"
+
+    if not pred_path.exists() or not gt_path.exists():
+        return None
+
+    predictions = np.load(pred_path)
+    ground_truths = np.load(gt_path)
+
+    # Calculate metrics for each image
+    all_dice = []
+    all_iou = []
+    all_accuracy = []
+    all_sensitivity = []
+    all_specificity = []
+
+    for pred, gt in zip(predictions, ground_truths, strict=False):
+        metrics = calculate_metrics(pred, gt)
+        all_dice.append(metrics["dice"])
+        all_iou.append(metrics["iou"])
+        all_accuracy.append(metrics["accuracy"])
+        all_sensitivity.append(metrics["sensitivity"])
+        all_specificity.append(metrics["specificity"])
+
+    # Calculate mean and std
+    info = parse_experiment_name(str(pred_dir))
+    return {
+        "dataset": info["dataset"],
+        "model": info["model"],
+        "loss": info["loss"],
+        "n_images": len(predictions),
+        "dice_mean": np.mean(all_dice),
+        "dice_std": np.std(all_dice),
+        "iou_mean": np.mean(all_iou),
+        "iou_std": np.std(all_iou),
+        "accuracy_mean": np.mean(all_accuracy),
+        "accuracy_std": np.std(all_accuracy),
+        "sensitivity_mean": np.mean(all_sensitivity),
+        "sensitivity_std": np.std(all_sensitivity),
+        "specificity_mean": np.mean(all_specificity),
+        "specificity_std": np.std(all_specificity),
     }
 
 
@@ -64,88 +121,70 @@ def main() -> None:
     parser.add_argument(
         "--pred_dir",
         type=str,
-        required=True,
-        help="Directory containing predictions (with predictions.npy and ground_truths.npy)",
+        default=None,
+        help="Model name (e.g., 'drive_unet_crossentropyloss') - prepends 'Project_3/dataset/predictions/'",
     )
     parser.add_argument(
-        "--output", type=str, default=None, help="Output CSV file for results (default: <pred_dir>/metrics.csv)"
+        "--all",
+        action="store_true",
+        help="Measure all prediction directories in Project_3/dataset/predictions/",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="Project_3/dataset/metrics_summary.txt",
+        help="Output text file for results",
     )
     args = parser.parse_args()
 
-    # Load predictions and ground truths
-    pred_dir = Path(args.pred_dir)
-    pred_path = pred_dir / "predictions.npy"
-    gt_path = pred_dir / "ground_truths.npy"
+    results = []
 
-    if not pred_path.exists():
-        msg = f"Predictions not found: {pred_path}"
-        raise FileNotFoundError(msg)
-    if not gt_path.exists():
-        msg = f"Ground truths not found: {gt_path}"
-        raise FileNotFoundError(msg)
+    if args.all:
+        # Find all prediction directories under dataset/predictions/
+        pred_dirs = sorted(Path("Project_3/dataset/predictions").glob("*_*_*"))
 
-    predictions = np.load(pred_path)
-    ground_truths = np.load(gt_path)
+        for pred_dir in pred_dirs:
+            if pred_dir.is_dir():
+                result = measure_single(str(pred_dir))
+                if result:
+                    results.append(result)
+                else:
+                    pass
 
-    # Calculate metrics for each image
-    all_metrics = []
-    for i, (pred, gt) in enumerate(zip(predictions, ground_truths, strict=False)):
-        metrics = calculate_metrics(pred, gt)
-        metrics["image_id"] = i
-        all_metrics.append(metrics)
+    elif args.pred_dir:
+        # Automatically prepend the dataset/predictions path
+        pred_dir_path = Path("Project_3/dataset/predictions") / args.pred_dir
+        result = measure_single(str(pred_dir_path))
+        if result:
+            results.append(result)
+        else:
+            return
 
-    # Convert to DataFrame
-    df = pd.DataFrame(all_metrics)
+    else:
+        parser.print_help()
+        return
 
-    # Calculate mean and std
-    mean_metrics = df[["dice", "iou", "accuracy", "sensitivity", "specificity"]].mean()
-    std_metrics = df[["dice", "iou", "accuracy", "sensitivity", "specificity"]].std()
+    # Write results to text file
+    output_file = Path(args.output)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Print results
+    with Path.open(output_file, "w") as f:
+        f.write("=" * 90 + "\n")
+        f.write("SEGMENTATION METRICS SUMMARY\n")
+        f.write("=" * 90 + "\n\n")
 
-    # Save detailed results
-    output_file = Path(args.output) if args.output else pred_dir / "metrics.csv"
-    df.to_csv(output_file, index=False)
+        for result in results:
+            f.write(f"Dataset: {result['dataset']:<10} Model: {result['model']:<10} Loss: {result['loss']}\n")
+            f.write("-" * 90 + "\n")
+            f.write(f"  Images:      {result['n_images']}\n")
+            f.write(f"  Dice:        {result['dice_mean']:.4f} ± {result['dice_std']:.4f}\n")
+            f.write(f"  IoU:         {result['iou_mean']:.4f} ± {result['iou_std']:.4f}\n")
+            f.write(f"  Accuracy:    {result['accuracy_mean']:.4f} ± {result['accuracy_std']:.4f}\n")
+            f.write(f"  Sensitivity: {result['sensitivity_mean']:.4f} ± {result['sensitivity_std']:.4f}\n")
+            f.write(f"  Specificity: {result['specificity_mean']:.4f} ± {result['specificity_std']:.4f}\n")
+            f.write("\n")
 
-    # Save summary
-    summary_file = output_file.with_name(output_file.stem + "_summary.csv")
-    summary_df = pd.DataFrame(
-        {
-            "metric": ["dice", "iou", "accuracy", "sensitivity", "specificity"],
-            "mean": [
-                mean_metrics["dice"],
-                mean_metrics["iou"],
-                mean_metrics["accuracy"],
-                mean_metrics["sensitivity"],
-                mean_metrics["specificity"],
-            ],
-            "std": [
-                std_metrics["dice"],
-                std_metrics["iou"],
-                std_metrics["accuracy"],
-                std_metrics["sensitivity"],
-                std_metrics["specificity"],
-            ],
-        }
-    )
-    summary_df.to_csv(summary_file, index=False)
-
-    # Save summary as JSON
-    summary_json = {
-        "num_images": len(predictions),
-        "mean_dice": float(mean_metrics["dice"]),
-        "std_dice": float(std_metrics["dice"]),
-        "mean_iou": float(mean_metrics["iou"]),
-        "std_iou": float(std_metrics["iou"]),
-        "mean_accuracy": float(mean_metrics["accuracy"]),
-        "std_accuracy": float(std_metrics["accuracy"]),
-        "mean_sensitivity": float(mean_metrics["sensitivity"]),
-        "std_sensitivity": float(std_metrics["sensitivity"]),
-        "mean_specificity": float(mean_metrics["specificity"]),
-        "std_specificity": float(std_metrics["specificity"]),
-    }
-    json_file = output_file.with_name(output_file.stem + "_summary.json")
-    json_file.write_text(json.dumps(summary_json, indent=2))
+        f.write("=" * 90 + "\n")
 
 
 if __name__ == "__main__":
