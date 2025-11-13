@@ -16,11 +16,16 @@ mkdir -p logs
 DATASET=${1:-Ph2}
 MODEL=${2:-EncDec}
 LOSS=${3:-CrossEntropyLoss}
-BATCH_SIZE=${4:-10} # batch size of 4 for Drive (small dataset)
+BATCH_SIZE=${4:-10} # batch size of 4 for Drive (small dataset) otherwise like 10 for Ph2
 EPOCHS=${5:-50}
-SIZE=${6:-128}
+SIZE=${6:-512}
 LR=${7:-0.001}
 POS_WEIGHT=${8:-} # Optional positive weight for WeightedCrossEntropyLoss (good value maybe around 10)
+TEST_SPLIT=${9:-0.10}
+VAL_SPLIT=${10:-0.10}
+PRED_SPLIT=${11:-all} # Which splits to predict: train/val/test/all
+VISUALIZE=${12:-true} # Whether to create visualizations (true/false)
+NUM_VIS=${13:-3} # Number of visualizations to create
 
 # Load CUDA module only (Python comes from virtual environment)
 module load cuda/12.4
@@ -51,8 +56,17 @@ echo "  Batch Size: $BATCH_SIZE"
 echo "  Epochs: $EPOCHS"
 echo "  Image Size: ${SIZE}x${SIZE}"
 echo "  Learning Rate: $LR"
+echo "  Test Split: $TEST_SPLIT"
+echo "  Val Split: $VAL_SPLIT"
 if [ ! -z "$POS_WEIGHT" ]; then
     echo "  Positive Weight: $POS_WEIGHT"
+fi
+echo ""
+echo "Prediction Configuration:"
+echo "  Split to Process: $PRED_SPLIT"
+echo "  Visualizations: $VISUALIZE"
+if [ "$VISUALIZE" = "true" ]; then
+    echo "  Number of Visualizations: $NUM_VIS"
 fi
 echo "========================================="
 echo ""
@@ -61,7 +75,7 @@ echo ""
 cd $HOME/Documents/IntroDeepCompVision_projects/Project_3
 
 # Build training command - with/out optional pos_weight parameter
-CMD="python3 train.py --dataset $DATASET --model $MODEL --loss $LOSS --batch_size $BATCH_SIZE --epochs $EPOCHS --size $SIZE --lr $LR"
+CMD="python3 train.py --dataset $DATASET --model $MODEL --loss $LOSS --batch_size $BATCH_SIZE --epochs $EPOCHS --size $SIZE --lr $LR --test_split $TEST_SPLIT --val_split $VAL_SPLIT"
 if [ ! -z "$POS_WEIGHT" ]; then
     CMD="$CMD --pos_weight $POS_WEIGHT"
 fi
@@ -84,21 +98,53 @@ OUTPUT_DIR="dataset/predictions/${DATASET,,}_${MODEL,,}_${LOSS,,}"
 
 echo ""
 echo "========================================="
-echo "PHASE 2: PREDICTION ON TEST SET"
+echo "PHASE 2: PREDICTION"
 echo "========================================="
 echo "  Dataset: $DATASET"
 echo "  Checkpoint: $CHECKPOINT"
 echo "  Output: $OUTPUT_DIR"
+echo "  Processing Splits: $PRED_SPLIT"
 echo "========================================="
 echo ""
 
-# Run prediction
-python3 predict.py \
+# Build prediction command
+PRED_CMD="python3 predict.py \
     --dataset $DATASET \
     --model $MODEL \
     --checkpoint $CHECKPOINT \
     --size $SIZE \
-    --output_dir $OUTPUT_DIR
+    --output_dir $OUTPUT_DIR \
+    --test_split $TEST_SPLIT \
+    --val_split $VAL_SPLIT \
+    --split $PRED_SPLIT"
+
+# Add visualization flags if enabled
+if [ "$VISUALIZE" = "true" ]; then
+    PRED_CMD="$PRED_CMD --visualize --num_vis $NUM_VIS"
+fi
+
+# Run prediction
+eval $PRED_CMD
+
+# Check if prediction was successful
+if [ $? -ne 0 ]; then
+    echo "Prediction failed! Exiting..."
+    exit 1
+fi
+
+echo ""
+echo "========================================="
+echo "PHASE 3: METRICS CALCULATION"
+echo "========================================="
+echo "  Processing Splits: $PRED_SPLIT"
+echo "========================================="
+echo ""
+
+# Run metrics calculation
+python3 measure.py \
+    --pred_dir "${DATASET,,}_${MODEL,,}_${LOSS,,}" \
+    --split $PRED_SPLIT \
+    --output "dataset/metrics_${DATASET,,}_${MODEL,,}_${LOSS,,}.txt"
 
 echo ""
 echo "========================================="

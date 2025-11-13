@@ -3,11 +3,11 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import torch
-from dataset.driveDataset import Drive
-from dataset.ph2Dataset import Ph2
+from dataset.drive_dataset import Drive
+from dataset.ph2_dataset import Ph2
 from losses import CrossEntropyLoss, FocalLoss, WeightedCrossEntropyLoss
-from model.EncDecModel import EncDec
-from model.UNetModel import UNet
+from model.encdec_model import EncDec
+from model.unet_model import UNet
 from torch import nn, optim
 from torch.utils.data import DataLoader
 from torchsummary import summary
@@ -46,33 +46,47 @@ def create_data_loaders(
     """
     # Define transforms
     transform = transforms.Compose([transforms.Resize((size, size)), transforms.ToTensor()])
+    augmentation = transforms.Compose(
+        [transforms.Resize((size, size)), transforms.RandomRotation(10), transforms.ToTensor()]
+    )
 
-    # Load dataset based on choice
+    # Load dataset based on choice - create separate datasets for train and val
     if dataset_name == "Drive":
-        # Test set has no labels - use train for all splits
-        full_dataset = Drive(train=True, transform=transform)
+        # Create dataset WITH augmentation for training
+        train_dataset_full = Drive(transform=augmentation)
+        # Create dataset WITHOUT augmentation for validation
+        val_dataset_full = Drive(transform=transform)
     elif dataset_name == "Ph2":
-        full_dataset = Ph2(transform=transform)
+        # Ph2 doesn't use augmentation
+        train_dataset_full = Ph2(transform=transform)
+        val_dataset_full = Ph2(transform=transform)
     else:
         msg = f"Unknown dataset: {dataset_name}"
         raise ValueError(msg)
 
-    # Create train/val/test splits
-    total_size = len(full_dataset)
+    # Create train/val/test splits - get indices
+    total_size = len(train_dataset_full)
 
     # First split: separate test set
     test_size = int(test_split * total_size)
     train_val_size = total_size - test_size
-    train_val_dataset, _ = torch.utils.data.random_split(
-        full_dataset, [train_val_size, test_size], generator=torch.Generator().manual_seed(RANDOM_SEED)
-    )
+
+    # Get indices for splits
+    generator = torch.Generator().manual_seed(RANDOM_SEED)
+    train_val_indices = torch.randperm(total_size, generator=generator).tolist()[:train_val_size]
 
     # Second split: separate validation from training
     val_size = int(val_split * train_val_size)
     train_size = train_val_size - val_size
-    train_subset, val_subset = torch.utils.data.random_split(
-        train_val_dataset, [train_size, val_size], generator=torch.Generator().manual_seed(RANDOM_SEED)
-    )
+
+    generator = torch.Generator().manual_seed(RANDOM_SEED)
+    shuffled = torch.randperm(train_val_size, generator=generator).tolist()
+    train_indices = [train_val_indices[i] for i in shuffled[:train_size]]
+    val_indices = [train_val_indices[i] for i in shuffled[train_size:]]
+
+    # Create subsets using the appropriate datasets
+    train_subset = torch.utils.data.Subset(train_dataset_full, train_indices)
+    val_subset = torch.utils.data.Subset(val_dataset_full, val_indices)
 
     # Create data loaders
     train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=workers)

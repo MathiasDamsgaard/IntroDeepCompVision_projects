@@ -69,11 +69,21 @@ def parse_experiment_name(pred_dir: str) -> dict:
     return {"dataset": "Unknown", "model": "Unknown", "loss": "Unknown"}
 
 
-def measure_single(pred_dir: str) -> dict:
-    """Measure metrics for a single prediction directory."""
+def measure_single(pred_dir: str, split_name: str = "all") -> dict:
+    """Measure metrics for a single prediction directory and split.
+
+    Args:
+        pred_dir: Base prediction directory
+        split_name: Name of split ("train", "val", "test", or "all")
+
+    Returns:
+        Dictionary with metrics or None if files don't exist
+
+    """
     pred_dir = Path(pred_dir)
-    pred_path = pred_dir / "predictions.npy"
-    gt_path = pred_dir / "ground_truths.npy"
+    split_dir = pred_dir / split_name
+    pred_path = split_dir / "predictions.npy"
+    gt_path = split_dir / "ground_truths.npy"
 
     if not pred_path.exists() or not gt_path.exists():
         return None
@@ -88,7 +98,7 @@ def measure_single(pred_dir: str) -> dict:
     all_sensitivity = []
     all_specificity = []
 
-    for pred, gt in zip(predictions, ground_truths, strict=False):
+    for pred, gt in zip(predictions, ground_truths):  # noqa: B905
         metrics = calculate_metrics(pred, gt)
         all_dice.append(metrics["dice"])
         all_iou.append(metrics["iou"])
@@ -102,6 +112,7 @@ def measure_single(pred_dir: str) -> dict:
         "dataset": info["dataset"],
         "model": info["model"],
         "loss": info["loss"],
+        "split": split_name,
         "n_images": len(predictions),
         "dice_mean": np.mean(all_dice),
         "dice_std": np.std(all_dice),
@@ -130,6 +141,13 @@ def main() -> None:
         help="Measure all prediction directories in Project_3/dataset/predictions/",
     )
     parser.add_argument(
+        "--split",
+        type=str,
+        default="all",
+        choices=["train", "val", "test", "all"],
+        help="Which split to measure (default: all)",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="Project_3/dataset/metrics_summary.txt",
@@ -139,29 +157,34 @@ def main() -> None:
 
     results = []
 
+    # Determine which splits to process
+    splits_to_process = ["train", "val", "test"] if args.split == "all" else [args.split]
+
     if args.all:
         # Find all prediction directories under dataset/predictions/
         pred_dirs = sorted(Path("Project_3/dataset/predictions").glob("*_*_*"))
 
         for pred_dir in pred_dirs:
             if pred_dir.is_dir():
-                result = measure_single(str(pred_dir))
-                if result:
-                    results.append(result)
-                else:
-                    pass
+                for split_name in splits_to_process:
+                    result = measure_single(str(pred_dir), split_name)
+                    if result:
+                        results.append(result)
 
     elif args.pred_dir:
         # Automatically prepend the dataset/predictions path
         pred_dir_path = Path("Project_3/dataset/predictions") / args.pred_dir
-        result = measure_single(str(pred_dir_path))
-        if result:
-            results.append(result)
-        else:
-            return
+        for split_name in splits_to_process:
+            result = measure_single(str(pred_dir_path), split_name)
+            if result:
+                results.append(result)
 
     else:
         parser.print_help()
+        return
+
+    if not results:
+        print("No results found. Make sure predictions have been generated.")  # noqa: T201
         return
 
     # Write results to text file
@@ -169,13 +192,16 @@ def main() -> None:
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     with Path.open(output_file, "w") as f:
-        f.write("=" * 90 + "\n")
+        f.write("=" * 100 + "\n")
         f.write("SEGMENTATION METRICS SUMMARY\n")
-        f.write("=" * 90 + "\n\n")
+        f.write("=" * 100 + "\n\n")
 
         for result in results:
-            f.write(f"Dataset: {result['dataset']:<10} Model: {result['model']:<10} Loss: {result['loss']}\n")
-            f.write("-" * 90 + "\n")
+            f.write(
+                f"Dataset: {result['dataset']:<10} Model: {result['model']:<10} "
+                f"Loss: {result['loss']:<25} Split: {result['split']}\n"
+            )
+            f.write("-" * 100 + "\n")
             f.write(f"  Images:      {result['n_images']}\n")
             f.write(f"  Dice:        {result['dice_mean']:.4f} ± {result['dice_std']:.4f}\n")
             f.write(f"  IoU:         {result['iou_mean']:.4f} ± {result['iou_std']:.4f}\n")
@@ -184,7 +210,9 @@ def main() -> None:
             f.write(f"  Specificity: {result['specificity_mean']:.4f} ± {result['specificity_std']:.4f}\n")
             f.write("\n")
 
-        f.write("=" * 90 + "\n")
+        f.write("=" * 100 + "\n")
+
+    print(f"Metrics saved to {output_file}")  # noqa: T201
 
 
 if __name__ == "__main__":

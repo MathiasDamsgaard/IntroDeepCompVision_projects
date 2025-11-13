@@ -1,6 +1,6 @@
 import torch
-import torch.nn.functional as F
 from torch import nn
+from torch.nn import functional
 
 
 class UNet(nn.Module):
@@ -21,31 +21,31 @@ class UNet(nn.Module):
         self.bottleneck_conv = nn.Conv2d(512, 1024, 3, padding=1)
 
         # decoder (upsampling)
-        self.upsample0 = nn.Upsample(16)  # 8 -> 16
+        self.upsample0 = nn.Upsample(scale_factor=2)  # 8 -> 16
         self.dec_conv0 = nn.Conv2d(1024 + 512, 512, 3, padding=1)  # concatenated channels
-        self.upsample1 = nn.Upsample(32)  # 16 -> 32
+        self.upsample1 = nn.Upsample(scale_factor=2)  # 16 -> 32
         self.dec_conv1 = nn.Conv2d(512 + 256, 256, 3, padding=1)  # concatenated channels
-        self.upsample2 = nn.Upsample(64)  # 32 -> 64
+        self.upsample2 = nn.Upsample(scale_factor=2)  # 32 -> 64
         self.dec_conv2 = nn.Conv2d(256 + 128, 128, 3, padding=1)  # concatenated channels
-        self.upsample3 = nn.Upsample(128)  # 64 -> 128
+        self.upsample3 = nn.Upsample(scale_factor=2)  # 64 -> 128 (or any input size / 8)
         self.dec_conv3 = nn.Conv2d(128 + 64, 1, 3, padding=1)  # concatenated channels
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         # encoder
-        e0 = F.relu(self.enc_conv0(x))
+        e0 = functional.relu(self.enc_conv0(x))
         p0 = self.pool0(e0)
-        e1 = F.relu(self.enc_conv1(p0))
+        e1 = functional.relu(self.enc_conv1(p0))
         p1 = self.pool1(e1)
-        e2 = F.relu(self.enc_conv2(p1))
+        e2 = functional.relu(self.enc_conv2(p1))
         p2 = self.pool2(e2)
-        e3 = F.relu(self.enc_conv3(p2))
+        e3 = functional.relu(self.enc_conv3(p2))
         p3 = self.pool3(e3)
 
         # bottleneck
-        b = F.relu(self.bottleneck_conv(p3))
+        b = functional.relu(self.bottleneck_conv(p3))
 
         # decoder with skip connections
-        d0 = F.relu(self.dec_conv0(torch.cat([self.upsample0(b), e3], dim=1)))
-        d1 = F.relu(self.dec_conv1(torch.cat([self.upsample1(d0), e2], dim=1)))
-        d2 = F.relu(self.dec_conv2(torch.cat([self.upsample2(d1), e1], dim=1)))
+        d0 = functional.relu(self.dec_conv0(torch.cat([self.upsample0(b), e3], dim=1)))
+        d1 = functional.relu(self.dec_conv1(torch.cat([self.upsample1(d0), e2], dim=1)))
+        d2 = functional.relu(self.dec_conv2(torch.cat([self.upsample2(d1), e1], dim=1)))
         return self.dec_conv3(torch.cat([self.upsample3(d2), e0], dim=1))  # no activation
