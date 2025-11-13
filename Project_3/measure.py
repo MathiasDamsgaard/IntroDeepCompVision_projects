@@ -133,12 +133,12 @@ def main() -> None:
         "--pred_dir",
         type=str,
         default=None,
-        help="Model name (e.g., 'drive_unet_crossentropyloss') - prepends 'Project_3/dataset/predictions/'",
+        help="Model name (e.g., 'drive_unet_crossentropyloss') - prepends 'dataset/predictions/'",
     )
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Measure all prediction directories in Project_3/dataset/predictions/",
+        help="Measure all prediction directories in dataset/predictions/",
     )
     parser.add_argument(
         "--split",
@@ -150,7 +150,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=str,
-        default="Project_3/dataset/metrics_summary.txt",
+        default="dataset/metrics_summary.txt",
         help="Output text file for results",
     )
     args = parser.parse_args()
@@ -162,7 +162,7 @@ def main() -> None:
 
     if args.all:
         # Find all prediction directories under dataset/predictions/
-        pred_dirs = sorted(Path("Project_3/dataset/predictions").glob("*_*_*"))
+        pred_dirs = sorted(Path("dataset/predictions").glob("*_*_*"))
 
         for pred_dir in pred_dirs:
             if pred_dir.is_dir():
@@ -173,7 +173,7 @@ def main() -> None:
 
     elif args.pred_dir:
         # Automatically prepend the dataset/predictions path
-        pred_dir_path = Path("Project_3/dataset/predictions") / args.pred_dir
+        pred_dir_path = Path("dataset/predictions") / args.pred_dir
         for split_name in splits_to_process:
             result = measure_single(str(pred_dir_path), split_name)
             if result:
