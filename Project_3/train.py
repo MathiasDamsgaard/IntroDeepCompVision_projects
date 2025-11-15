@@ -14,6 +14,11 @@ from torchsummary import summary
 from torchvision import transforms
 from tqdm import tqdm
 
+
+from dataset.ph2Dataset import WeaklySupervisedPh2
+from losses import PointBCELoss
+from utils import generate_clicks
+
 # Global seed for reproducibility (must match predict.py)
 RANDOM_SEED = 42
 
@@ -29,6 +34,11 @@ def create_data_loaders(
     workers: int,
     test_split: float,
     val_split: float,
+    supervision: str,       
+    pos_clicks: int,        
+    neg_clicks: int,
+    click_strategy: str,
+    click_mode: str,
 ) -> tuple[DataLoader, DataLoader]:
     """Create train and validation data loaders with proper splits.
 
@@ -57,9 +67,40 @@ def create_data_loaders(
         # Create dataset WITHOUT augmentation for validation
         val_dataset_full = Drive(transform=transform)
     elif dataset_name == "Ph2":
-        # Ph2 doesn't use augmentation
-        train_dataset_full = Ph2(transform=transform)
-        val_dataset_full = Ph2(transform=transform)
+        
+        if supervision == 'full':
+            full_dataset = Ph2(transform=transform)
+        else: # supervision == 'weak'
+            # full_dataset = WeaklySupervisedPh2(
+            #     transform=transform, 
+            #     num_pos_clicks=pos_clicks, 
+            #     num_neg_clicks=neg_clicks,
+            #     strategy=click_strategy
+            # )
+
+            if click_mode == 'fixed':
+                # Generate clicks ONCE before training
+                print("--- Generating a FIXED set of clicks for the entire training ---")
+                # First, load the full dataset to get the masks
+                temp_full_dataset = Ph2(transform=transform)
+                precomputed_clicks = [
+                    generate_clicks(
+                        mask, 
+                        num_pos_clicks=pos_clicks, 
+                        num_neg_clicks=neg_clicks, 
+                        strategy=click_strategy
+                    ) 
+                    for _, mask in tqdm(temp_full_dataset, desc="Generating fixed clicks")
+                ]
+                # Now, create the dataset using these pre-computed clicks
+                full_dataset = WeaklySupervisedPh2(transform=transform, precomputed_clicks=precomputed_clicks)
+            else: # click_mode == 'dynamic'
+                full_dataset = WeaklySupervisedPh2(
+                    transform=transform, 
+                    num_pos_clicks=pos_clicks, 
+                    num_neg_clicks=neg_clicks,
+                    strategy=click_strategy
+                )
     else:
         msg = f"Unknown dataset: {dataset_name}"
         raise ValueError(msg)
@@ -174,6 +215,8 @@ def save_results(
     loss_name: str,
     epochs: int,
     output_dir: str,
+    supervision: str,
+    args: argparse.Namespace,
 ) -> None:
     """Save model checkpoint and training plots.
 
@@ -189,7 +232,12 @@ def save_results(
 
     """
     # Create filename base
-    filename_base = f"{dataset_name.lower()}_{model_name.lower()}_{loss_name.lower()}"
+    # filename_base = f"{dataset_name.lower()}_{model_name.lower()}_{loss_name.lower()}"
+    if supervision == 'weak':
+        # filename_base = f"{dataset_name.lower()}_{model_name.lower()}_{loss_name.lower()}_weak_s_{args.click_strategy}_p{args.pos_clicks}_n{args.neg_clicks}"
+        filename_base = f"{dataset_name.lower()}_{model_name.lower()}_weak_m_{args.click_mode}_s_{args.click_strategy}_p{args.pos_clicks}_n{args.neg_clicks}"
+    else:
+        filename_base = f"{dataset_name.lower()}_{model_name.lower()}_{loss_name.lower()}"
 
     # Save model checkpoint
     checkpoint_dir = Path(output_dir) / "checkpoints"
@@ -257,6 +305,33 @@ def main() -> None:
     parser.add_argument("--test_split", type=float, default=0.10, help="Test split ratio")
     parser.add_argument("--val_split", type=float, default=0.10, help="Validation split ratio applied after test split")
     parser.add_argument("--output_dir", type=str, default="model", help="Directory to save model outputs and results")
+
+
+    parser.add_argument(
+        "--supervision", type=str, default="full", choices=["full", "weak"], 
+        help="Supervision type: full masks or weak point clicks."
+    )
+    parser.add_argument(
+        "--pos_clicks", type=int, default=10, help="Number of positive clicks for weak supervision."
+    )
+    parser.add_argument(
+        "--neg_clicks", type=int, default=10, help="Number of negative clicks for weak supervision."
+    )
+    parser.add_argument(
+        "--click_strategy", type=str, default="random", choices=["random", "spaced"],
+        help="Strategy for sampling clicks in weak supervision."
+    )
+    
+
+    parser.add_argument(
+        "--click_mode", type=str, default="dynamic", choices=["dynamic", "fixed"],
+        help="How to generate clicks: 'dynamic' (every epoch) or 'fixed' (once)."
+    )
+
+
+    parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay for the Adam optimizer.")
+
+
     args = parser.parse_args()
 
     # Create data loaders
@@ -267,6 +342,11 @@ def main() -> None:
         workers=args.workers,
         test_split=args.test_split,
         val_split=args.val_split,
+        supervision=args.supervision,   
+        pos_clicks=args.pos_clicks,   
+        neg_clicks=args.neg_clicks,
+        click_strategy=args.click_strategy,
+        click_mode=args.click_mode
     )
 
     # Setup device and model
@@ -280,18 +360,25 @@ def main() -> None:
     summary(model, (3, args.size, args.size))
 
     # Setup optimizer and loss function
-    optimizer = optim.Adam(model.parameters(), args.lr)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
-    loss_fns = {
-        "CrossEntropyLoss": CrossEntropyLoss,
-        "FocalLoss": FocalLoss,
-        "WeightedCrossEntropyLoss": WeightedCrossEntropyLoss,
-    }
-
-    if args.loss == "WeightedCrossEntropyLoss":
-        loss_fn = loss_fns[args.loss](pos_weight=args.pos_weight)
+    if args.supervision == 'weak':
+        loss_fn = PointBCELoss()
+        loss_name = "PointBCELoss" # Use a fixed name for saving results
+        print("--- Using WEAK supervision with PointBCELoss ---")
     else:
-        loss_fn = loss_fns[args.loss]()
+        loss_fns = {
+            "CrossEntropyLoss": CrossEntropyLoss,
+            "FocalLoss": FocalLoss,
+            "WeightedCrossEntropyLoss": WeightedCrossEntropyLoss,
+        }
+
+        if args.loss == "WeightedCrossEntropyLoss":
+            loss_fn = loss_fns[args.loss](pos_weight=args.pos_weight)
+        else:
+            loss_fn = loss_fns[args.loss]()
+        
+        loss_name = args.loss
 
     # Train model
     train_losses, val_losses = train_model(
@@ -304,6 +391,8 @@ def main() -> None:
         device=device,
     )
 
+
+
     # Save results
     save_results(
         model=model,
@@ -311,9 +400,11 @@ def main() -> None:
         val_losses=val_losses,
         dataset_name=args.dataset,
         model_name=args.model,
-        loss_name=args.loss,
+        loss_name=loss_name,
         epochs=args.epochs,
         output_dir=args.output_dir,
+        supervision=args.supervision,
+        args=args,
     )
 
 
