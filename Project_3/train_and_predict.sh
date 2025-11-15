@@ -16,7 +16,7 @@ mkdir -p logs
 DATASET=${1:-Ph2}
 MODEL=${2:-EncDec}
 LOSS=${3:-CrossEntropyLoss}
-BATCH_SIZE=${4:-10} # batch size of 4 for Drive (small dataset) otherwise like 10 for Ph2
+BATCH_SIZE=${4:-8} # batch size of 4 for Drive (small dataset) otherwise like 8 for Ph2
 EPOCHS=${5:-50}
 SIZE=${6:-512}
 LR=${7:-0.001}
