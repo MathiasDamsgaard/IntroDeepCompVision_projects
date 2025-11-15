@@ -4,29 +4,29 @@ SEGMENTATION METRICS SUMMARY
 
 Dataset: Drive      Model: Unet       Loss: Crossentropyloss          Split: train
 ----------------------------------------------------------------------------------------------------
-  Images:      17
-  Dice:        0.0000 ± 0.0000
-  IoU:         0.0000 ± 0.0000
-  Accuracy:    0.9477 ± 0.0101
-  Sensitivity: 0.0000 ± 0.0000
+  Images:      16
+  Dice:        0.0006 ± 0.0022
+  IoU:         0.0003 ± 0.0011
+  Accuracy:    0.9470 ± 0.0100
+  Sensitivity: 0.0003 ± 0.0011
   Specificity: 1.0000 ± 0.0000
 
 Dataset: Drive      Model: Unet       Loss: Crossentropyloss          Split: val
 ----------------------------------------------------------------------------------------------------
-  Images:      1
+  Images:      2
   Dice:        0.0000 ± 0.0000
   IoU:         0.0000 ± 0.0000
-  Accuracy:    0.9499 ± 0.0000
+  Accuracy:    0.9540 ± 0.0041
   Sensitivity: 0.0000 ± 0.0000
   Specificity: 1.0000 ± 0.0000
 
 Dataset: Drive      Model: Unet       Loss: Crossentropyloss          Split: test
 ----------------------------------------------------------------------------------------------------
   Images:      2
-  Dice:        0.0000 ± 0.0000
-  IoU:         0.0000 ± 0.0000
-  Accuracy:    0.9516 ± 0.0033
-  Sensitivity: 0.0000 ± 0.0000
+  Dice:        0.0003 ± 0.0003
+  IoU:         0.0002 ± 0.0002
+  Accuracy:    0.9517 ± 0.0033
+  Sensitivity: 0.0002 ± 0.0002
   Specificity: 1.0000 ± 0.0000
 
 ====================================================================================================

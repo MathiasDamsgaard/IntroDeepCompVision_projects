@@ -4,29 +4,29 @@ SEGMENTATION METRICS SUMMARY
 
 Dataset: Ph2        Model: Unet       Loss: Crossentropyloss          Split: train
 ----------------------------------------------------------------------------------------------------
-  Images:      162
-  Dice:        0.8930 ± 0.0967
-  IoU:         0.8187 ± 0.1384
-  Accuracy:    0.9332 ± 0.0892
-  Sensitivity: 0.8593 ± 0.1448
-  Specificity: 0.9836 ± 0.0283
+  Images:      128
+  Dice:        0.9202 ± 0.0765
+  IoU:         0.8601 ± 0.1117
+  Accuracy:    0.9486 ± 0.0594
+  Sensitivity: 0.9230 ± 0.0782
+  Specificity: 0.9680 ± 0.0554
 
 Dataset: Ph2        Model: Unet       Loss: Crossentropyloss          Split: val
 ----------------------------------------------------------------------------------------------------
-  Images:      18
-  Dice:        0.8945 ± 0.0957
-  IoU:         0.8203 ± 0.1302
-  Accuracy:    0.9299 ± 0.0599
-  Sensitivity: 0.9070 ± 0.0749
-  Specificity: 0.9669 ± 0.0468
+  Images:      32
+  Dice:        0.9063 ± 0.0779
+  IoU:         0.8372 ± 0.1190
+  Accuracy:    0.9430 ± 0.0745
+  Sensitivity: 0.9318 ± 0.0926
+  Specificity: 0.9640 ± 0.0573
 
 Dataset: Ph2        Model: Unet       Loss: Crossentropyloss          Split: test
 ----------------------------------------------------------------------------------------------------
-  Images:      20
-  Dice:        0.8846 ± 0.0526
-  IoU:         0.7970 ± 0.0832
-  Accuracy:    0.9395 ± 0.0752
-  Sensitivity: 0.8250 ± 0.0931
-  Specificity: 0.9905 ± 0.0100
+  Images:      40
+  Dice:        0.9095 ± 0.0906
+  IoU:         0.8439 ± 0.1200
+  Accuracy:    0.9479 ± 0.0603
+  Sensitivity: 0.9173 ± 0.0674
+  Specificity: 0.9662 ± 0.0596
 
 ====================================================================================================

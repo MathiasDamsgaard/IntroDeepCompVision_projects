@@ -4,29 +4,29 @@ SEGMENTATION METRICS SUMMARY
 
 Dataset: Drive      Model: Unet       Loss: Focalloss                 Split: train
 ----------------------------------------------------------------------------------------------------
-  Images:      17
-  Dice:        0.0000 ± 0.0000
-  IoU:         0.0000 ± 0.0000
-  Accuracy:    0.9477 ± 0.0101
-  Sensitivity: 0.0000 ± 0.0000
-  Specificity: 1.0000 ± 0.0000
+  Images:      16
+  Dice:        0.6001 ± 0.1433
+  IoU:         0.4427 ± 0.1377
+  Accuracy:    0.9307 ± 0.0461
+  Sensitivity: 0.8381 ± 0.0857
+  Specificity: 0.9361 ± 0.0519
 
 Dataset: Drive      Model: Unet       Loss: Focalloss                 Split: val
 ----------------------------------------------------------------------------------------------------
-  Images:      1
-  Dice:        0.0000 ± 0.0000
-  IoU:         0.0000 ± 0.0000
-  Accuracy:    0.9499 ± 0.0000
-  Sensitivity: 0.0000 ± 0.0000
-  Specificity: 1.0000 ± 0.0000
+  Images:      2
+  Dice:        0.2722 ± 0.0616
+  IoU:         0.1590 ± 0.0413
+  Accuracy:    0.7572 ± 0.0575
+  Sensitivity: 0.9402 ± 0.0137
+  Specificity: 0.7487 ± 0.0602
 
 Dataset: Drive      Model: Unet       Loss: Focalloss                 Split: test
 ----------------------------------------------------------------------------------------------------
   Images:      2
-  Dice:        0.0000 ± 0.0000
-  IoU:         0.0000 ± 0.0000
-  Accuracy:    0.9516 ± 0.0033
-  Sensitivity: 0.0000 ± 0.0000
-  Specificity: 1.0000 ± 0.0000
+  Dice:        0.6261 ± 0.1119
+  IoU:         0.4654 ± 0.1194
+  Accuracy:    0.9454 ± 0.0306
+  Sensitivity: 0.8110 ± 0.0607
+  Specificity: 0.9519 ± 0.0347
 
 ====================================================================================================

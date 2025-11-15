@@ -25,6 +25,7 @@ MEDIUM_TRAINING_THRESHOLD = 50
 def create_data_loaders(
     dataset_name: str,
     size: int,
+    rotation: int,
     batch_size: int,
     workers: int,
     test_split: float,
@@ -35,6 +36,7 @@ def create_data_loaders(
     Args:
         dataset_name: Name of dataset ("Drive" or "Ph2")
         size: Image size for resizing
+        rotation: Degree of random rotation for augmentation
         batch_size: Batch size for data loaders
         workers: Number of worker threads for data loading
         test_split: Ratio for test set split
@@ -47,7 +49,7 @@ def create_data_loaders(
     # Define transforms
     transform = transforms.Compose([transforms.Resize((size, size)), transforms.ToTensor()])
     augmentation = transforms.Compose(
-        [transforms.Resize((size, size)), transforms.RandomRotation(10), transforms.ToTensor()]
+        [transforms.Resize((size, size)), transforms.RandomRotation(rotation), transforms.ToTensor()]
     )
 
     # Load dataset based on choice - create separate datasets for train and val
@@ -246,14 +248,10 @@ def main() -> None:
     parser.add_argument("--batch_size", type=int, default=10, help="Batch size for training")
     parser.add_argument("--epochs", type=int, default=20, help="Number of epochs to train")
     parser.add_argument("--size", type=int, default=128, help="Image size (images will be resized to size x size)")
+    parser.add_argument("--rotation", type=int, default=10, help="Degree of random rotation for augmentation")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
+    parser.add_argument("--weight_decay", type=float, default=1e-4, help="Weight decay for optimizer")
     parser.add_argument("--workers", type=int, default=3, help="Number of data loading workers")
-    parser.add_argument(
-        "--pos_weight",
-        type=float,
-        default=None,
-        help="Positive class weight for WeightedCrossEntropyLoss (auto-calculated if not provided)",
-    )
     parser.add_argument("--test_split", type=float, default=0.10, help="Test split ratio")
     parser.add_argument("--val_split", type=float, default=0.10, help="Validation split ratio applied after test split")
     parser.add_argument("--output_dir", type=str, default="model", help="Directory to save model outputs and results")
@@ -263,6 +261,7 @@ def main() -> None:
     train_loader, val_loader = create_data_loaders(
         dataset_name=args.dataset,
         size=args.size,
+        rotation=args.rotation,
         batch_size=args.batch_size,
         workers=args.workers,
         test_split=args.test_split,
@@ -280,18 +279,14 @@ def main() -> None:
     summary(model, (3, args.size, args.size))
 
     # Setup optimizer and loss function
-    optimizer = optim.Adam(model.parameters(), args.lr)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     loss_fns = {
         "CrossEntropyLoss": CrossEntropyLoss,
         "FocalLoss": FocalLoss,
         "WeightedCrossEntropyLoss": WeightedCrossEntropyLoss,
     }
-
-    if args.loss == "WeightedCrossEntropyLoss":
-        loss_fn = loss_fns[args.loss](pos_weight=args.pos_weight)
-    else:
-        loss_fn = loss_fns[args.loss]()
+    loss_fn = loss_fns[args.loss]()
 
     # Train model
     train_losses, val_losses = train_model(
