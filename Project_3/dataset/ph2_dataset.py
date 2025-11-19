@@ -42,21 +42,39 @@ class Ph2(torch.utils.data.Dataset):
         return x, y
 
 
-class WeaklySupervisedPh2(Ph2):
-    """A version of the Ph2 dataset that returns simulated clicks instead of full masks."""
 
-    def __init__(self, transform: transforms.Compose, num_pos_clicks: int = 10, num_neg_clicks: int = 10) -> None:
-        # Initialize the parent Ph2 class
+
+
+
+class WeaklySupervisedPh2(Ph2):
+    """
+    A version of the Ph2 dataset that can either generate clicks dynamically
+    or use a pre-computed, fixed set of clicks.
+    """
+    def __init__(self, transform, num_pos_clicks=10, num_neg_clicks=10, strategy='random', precomputed_clicks=None):
         super().__init__(transform=transform)
         self.num_pos_clicks = num_pos_clicks
         self.num_neg_clicks = num_neg_clicks
+        self.strategy = strategy
+        self.precomputed_clicks = precomputed_clicks
 
-    def __getitem__(self, idx: int) -> tuple[Image.Image, Image.Image]:
-        # Get the original image and the full mask from the parent class
+    def __getitem__(self, idx):
+        # Always get the original image from the parent class
         image, full_mask = super().__getitem__(idx)
-
-        # Now, generate the click mask from the full mask
-        click_mask = generate_clicks(full_mask, num_pos_clicks=self.num_pos_clicks, num_neg_clicks=self.num_neg_clicks)
-
-        # Return the image and the click_mask (instead of the full_mask)
+        
+        # Decide where to get the clicks from
+        if self.precomputed_clicks is not None:
+            # --- FIXED MODE ---
+            # Get the clicks from the pre-computed list
+            click_mask = self.precomputed_clicks[idx]
+        else:
+            # --- DYNAMIC MODE ---
+            # Generate new clicks on the fly
+            click_mask = generate_clicks(
+                full_mask, 
+                num_pos_clicks=self.num_pos_clicks, 
+                num_neg_clicks=self.num_neg_clicks,
+                strategy=self.strategy
+            )
+        
         return image, click_mask
