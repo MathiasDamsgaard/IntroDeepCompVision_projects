@@ -4,8 +4,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import torch
 from dataset.drive_dataset import Drive
-from dataset.ph2_dataset import Ph2
-from dataset.ph2Dataset import WeaklySupervisedPh2
+from dataset.ph2_dataset import Ph2, WeaklySupervisedPh2
 from losses import CrossEntropyLoss, FocalLoss, PointBCELoss, WeightedCrossEntropyLoss
 from model.encdec_model import EncDec
 from model.unet_model import UNet

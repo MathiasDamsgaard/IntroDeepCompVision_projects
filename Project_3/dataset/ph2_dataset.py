@@ -42,26 +42,21 @@ class Ph2(torch.utils.data.Dataset):
         return x, y
 
 
-
-
-
-
 class WeaklySupervisedPh2(Ph2):
-    """
-    A version of the Ph2 dataset that can either generate clicks dynamically
-    or use a pre-computed, fixed set of clicks.
-    """
-    def __init__(self, transform, num_pos_clicks=10, num_neg_clicks=10, strategy='random', precomputed_clicks=None):
+    """Version of Ph2 dataset that can either generate clicks dynamically or use a pre-computed, fixed set of clicks."""
+
+    def __init__(self, transform: transforms.Compose, num_pos_clicks: int = 10, num_neg_clicks: int = 10,
+                 strategy: str = "random", precomputed_clicks: list | None = None) -> None:
         super().__init__(transform=transform)
         self.num_pos_clicks = num_pos_clicks
         self.num_neg_clicks = num_neg_clicks
         self.strategy = strategy
         self.precomputed_clicks = precomputed_clicks
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> tuple[Image.Image, Image.Image]:
         # Always get the original image from the parent class
         image, full_mask = super().__getitem__(idx)
-        
+
         # Decide where to get the clicks from
         if self.precomputed_clicks is not None:
             # --- FIXED MODE ---
@@ -71,10 +66,10 @@ class WeaklySupervisedPh2(Ph2):
             # --- DYNAMIC MODE ---
             # Generate new clicks on the fly
             click_mask = generate_clicks(
-                full_mask, 
-                num_pos_clicks=self.num_pos_clicks, 
+                full_mask,
+                num_pos_clicks=self.num_pos_clicks,
                 num_neg_clicks=self.num_neg_clicks,
                 strategy=self.strategy
             )
-        
+
         return image, click_mask
