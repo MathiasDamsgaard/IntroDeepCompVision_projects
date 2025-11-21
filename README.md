@@ -7,6 +7,12 @@
     uv sync --all-extras
     ```
 
+    You can also specify a specific project group to install dependencies for only that project:
+
+    ```bash
+    uv sync --group project1
+    ```
+
 3. Then do
     ```bash
     pre-commit install
