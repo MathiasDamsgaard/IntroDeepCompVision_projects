@@ -1,6 +1,7 @@
 # data
 *data*/
 !dataset/
+*.pkl
 
 # models
 #*model*/

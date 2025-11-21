@@ -31,7 +31,7 @@ WEIGHT_DECAY=${13:-1e-4} # Weight decay for optimizer
 module load cuda/12.4
 
 # Activate virtual environment (contains Python 3.13)
-VENV_PATH="$HOME/Documents/env"
+VENV_PATH="$HOME/Documents/IntroDeepCompVision_projects/.venv"
 if [ -d "$VENV_PATH" ]; then
     source "$VENV_PATH/bin/activate"
     echo "Virtual environment activated"
