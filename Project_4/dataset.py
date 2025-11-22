@@ -107,7 +107,11 @@ def get_dataloader(
             else:
                 weights.append(w1)
 
-        sampler = WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
+        # Set samples to a reasonable number to avoid excessive iterations per epoch.
+        # 10000 gives ~312 batches of size 32.
+        num_samples = 10000
+        # num_samples = len(weights)
+        sampler = WeightedRandomSampler(weights, num_samples=num_samples, replacement=True)
 
         return DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=num_workers)
 
