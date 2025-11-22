@@ -10,9 +10,6 @@ from logger import logger
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
-# Constants
-EVALUATION_IOU_THRESHOLD = 0.5
-
 
 def run_selective_search(image: np.ndarray, method: str = "fast") -> np.ndarray:
     """Run Selective Search on an image to extract object proposals.
@@ -73,6 +70,7 @@ def evaluate_recall(
     proposals_dict: dict[str, Any],
     annotations_dict: dict[str, list[list[int]]],
     k_values: list[int],
+    iou_threshold: float = 0.5,
 ) -> dict[int, float]:
     """Evaluate the recall of proposals at different k values.
 
@@ -82,6 +80,7 @@ def evaluate_recall(
         annotations_dict (dict[str, list[list[int]]]): Dictionary mapping image name to list of ground
             truth boxes [xmin, ymin, xmax, ymax].
         k_values (list[int]): List of integers representing the number of top proposals to consider.
+        iou_threshold (float): IoU threshold to consider a ground truth covered. Defaults to 0.5.
 
     Returns:
         dict[int, float]: Average recall for each k.
@@ -104,10 +103,10 @@ def evaluate_recall(
             current_proposals = proposals_xyxy[:k]
             found_gt = 0
             for gt in gt_boxes:
-                # Check if this GT is covered by any proposal with IoU >= 0.5
+                # Check if this GT is covered by any proposal with IoU >= iou_threshold
                 covered = False
                 for prop in current_proposals:
-                    if compute_iou(gt, prop) >= EVALUATION_IOU_THRESHOLD:
+                    if compute_iou(gt, prop) >= iou_threshold:
                         covered = True
                         break
                 if covered:
@@ -178,6 +177,7 @@ def prepare_dataset(
     all_annotations: dict[str, list[list[int]]],
     selected_k: int,
     iou_threshold: float,
+    max_negatives: int = 50,
 ) -> list[dict[str, Any]]:
     """Prepare the dataset by assigning labels to proposals based on IoU with ground truth.
 
@@ -187,6 +187,7 @@ def prepare_dataset(
         all_annotations (dict[str, list[list[int]]]): Dictionary of annotations.
         selected_k (int): Number of top proposals to select.
         iou_threshold (float): IoU threshold for positive label.
+        max_negatives (int): Maximum number of negative samples to keep per image.
 
     Returns:
         list[dict[str, Any]]: List of samples with image name, proposal, label, and IoU.
@@ -197,6 +198,7 @@ def prepare_dataset(
         gt_boxes = all_annotations[img_name]
         proposals = all_proposals[img_name][:selected_k]
 
+        neg_count = 0
         for p in proposals:
             # p is [x, y, w, h]
             p_xyxy = [p[0], p[1], p[0] + p[2], p[1] + p[3]]
@@ -208,6 +210,11 @@ def prepare_dataset(
 
             # Assign label: 1 if IoU >= 0.5, 0 otherwise
             label = 1 if best_iou >= iou_threshold else 0
+
+            if label == 0:
+                if neg_count >= max_negatives:
+                    continue
+                neg_count += 1
 
             dataset.append(
                 {
@@ -236,7 +243,9 @@ def main() -> None:
     val_output_path = script_dir / "proposals_data/val_proposals.pkl"
     test_output_path = script_dir / "proposals_data/test_proposals.pkl"
     selected_k = 1000  # Threshold for proposals
-    iou_threshold = 0.5
+    dataset_iou_threshold = 0.9  # For labeling proposals
+    recall_iou_threshold = 0.5  # For evaluating recall
+    max_negatives = 50  # Max negatives per image
 
     # --- 1. Extract Object Proposals ---
     logger.info("Step 1: Extracting object proposals...")
@@ -303,7 +312,9 @@ def main() -> None:
     # --- 4. Evaluate Proposals ---
     logger.info("Step 4: Evaluating proposals on training set...")
     k_values = [50, 100, 500, 1000, 1500, 2000]
-    recall_results = evaluate_recall(train_images, all_proposals, all_annotations, k_values)
+    recall_results = evaluate_recall(
+        train_images, all_proposals, all_annotations, k_values, iou_threshold=recall_iou_threshold
+    )
     mabo_results = evaluate_mabo(train_images, all_proposals, all_annotations, k_values)
 
     logger.info("Recall and MABO at different number of proposals:")
@@ -333,7 +344,14 @@ def main() -> None:
     # --- 5. Prepare Proposals for Training and Testing ---
     logger.info(f"Step 5: Preparing proposals for training and testing (Top {selected_k})...")
 
-    train_proposals_data = prepare_dataset(train_images, all_proposals, all_annotations, selected_k, iou_threshold)
+    train_proposals_data = prepare_dataset(
+        train_images,
+        all_proposals,
+        all_annotations,
+        selected_k,
+        dataset_iou_threshold,
+        max_negatives,
+    )
     logger.info(f"Generated {len(train_proposals_data)} training samples.")
     pos_count = sum(1 for x in train_proposals_data if x["label"] == 1)
     neg_count = len(train_proposals_data) - pos_count
@@ -344,7 +362,14 @@ def main() -> None:
         pickle.dump(train_proposals_data, f)
     logger.info(f"Saved training proposals to {train_output_path}")
 
-    val_proposals_data = prepare_dataset(val_images, all_proposals, all_annotations, selected_k, iou_threshold)
+    val_proposals_data = prepare_dataset(
+        val_images,
+        all_proposals,
+        all_annotations,
+        selected_k,
+        dataset_iou_threshold,
+        max_negatives,
+    )
     logger.info(f"Generated {len(val_proposals_data)} validation samples.")
     pos_count_val = sum(1 for x in val_proposals_data if x["label"] == 1)
     neg_count_val = len(val_proposals_data) - pos_count_val
@@ -355,7 +380,14 @@ def main() -> None:
         pickle.dump(val_proposals_data, f)
     logger.info(f"Saved validation proposals to {val_output_path}")
 
-    test_proposals_data = prepare_dataset(test_images, all_proposals, all_annotations, selected_k, iou_threshold)
+    test_proposals_data = prepare_dataset(
+        test_images,
+        all_proposals,
+        all_annotations,
+        selected_k,
+        dataset_iou_threshold,
+        max_negatives,
+    )
     logger.info(f"Generated {len(test_proposals_data)} test samples.")
     pos_count_test = sum(1 for x in test_proposals_data if x["label"] == 1)
     neg_count_test = len(test_proposals_data) - pos_count_test
