@@ -14,12 +14,12 @@ def get_model(num_classes: int = 2) -> nn.Module:
 
     """
     model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+    model.fc = nn.Linear(model.fc.in_features, num_classes)
 
-    # Freeze all parameters in the backbone
-    for param in model.parameters():
-        param.requires_grad = False
-
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, num_classes)
+    # Freeze backbone (all layers except the final fc layer)
+    # Only train the final classification layer
+    for name, param in model.named_parameters():
+        if not name.startswith("fc"):
+            param.requires_grad = False
 
     return model
