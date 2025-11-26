@@ -7,6 +7,7 @@
 #*model*/
 checkpoints/
 predictions/
+nms_results/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
