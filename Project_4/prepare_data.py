@@ -243,9 +243,9 @@ def main() -> None:
     val_output_path = script_dir / "proposals_data/val_proposals.pkl"
     test_output_path = script_dir / "proposals_data/test_proposals.pkl"
     selected_k = 1000  # Threshold for proposals
-    dataset_iou_threshold = 0.9  # For labeling proposals
+    dataset_iou_threshold = 0.5  # For labeling proposals
     recall_iou_threshold = 0.5  # For evaluating recall
-    max_negatives = 50  # Max negatives per image
+    max_negatives = 100  # Max negatives per image
 
     # --- 1. Extract Object Proposals ---
     logger.info("Step 1: Extracting object proposals...")
