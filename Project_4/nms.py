@@ -11,7 +11,7 @@ from PIL import Image
 from torch import nn
 from torchmetrics.detection import MeanAveragePrecision
 from torchvision import transforms
-from torchvision.ops import nms
+from torchvision.ops import box_iou, nms
 from tqdm import tqdm
 
 
@@ -19,7 +19,7 @@ def main() -> None:
     # Argument parsing
     parser = argparse.ArgumentParser()
     parser.add_argument("--output_dir", type=str, default="checkpoints")
-    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--iou_threshold", type=float, default=0.5)
     args = parser.parse_args()
 
     # Device
@@ -37,7 +37,7 @@ def main() -> None:
     model = model.to(device)
 
     # Load best model
-    model.load_state_dict(torch.load(output_dir / "best_model.pth"))
+    model.load_state_dict(torch.load(output_dir / "last_model.pth"))
     model.eval()
 
     # Create output folder for NMS visualizations
@@ -116,26 +116,41 @@ def main() -> None:
                 if len(boxes_by_class[class_idx]) > 0:
                     boxes = torch.stack(boxes_by_class[class_idx])
                     scores = torch.tensor(scores_by_class[class_idx])
-                    keep_indices = nms(boxes, scores, iou_threshold=0.5)
+                    keep_indices = nms(boxes, scores, iou_threshold=args.iou_threshold)
 
                     # Filter boxes and scores with keep_indices
                     kept_boxes_by_class[class_idx] = boxes[keep_indices]  # type: ignore  # noqa: PGH003
                     kept_scores_by_class[class_idx] = scores[keep_indices]  # type: ignore  # noqa: PGH003
 
-            # Plot and save the image with boxes
-            fig, ax = plt.subplots(1, figsize=(12, 8))
-            ax.imshow(img)
+            # Plot side-by-side comparison: before NMS (left) and after NMS (right)
+            fig, axes = plt.subplots(1, 2, figsize=(20, 8))
 
-            # Plot pothole detections (class 1) in red
+            # Left subplot: Before NMS (all detections)
+            axes[0].imshow(img)
+            if len(boxes_by_class[1]) > 0:
+                for box, score in zip(boxes_by_class[1], scores_by_class[1], strict=True):
+                    if isinstance(box, torch.Tensor):
+                        x1, y1, x2, y2 = box.tolist()
+                    else:
+                        x1, y1, x2, y2 = box
+                    rect = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2, edgecolor="red", facecolor="none")
+                    axes[0].add_patch(rect)
+                    axes[0].text(x1, y1 - 5, f"{score:.2f}", color="red", fontsize=8)
+            axes[0].set_title(f"Before NMS ({len(boxes_by_class[1])} detections)")
+            axes[0].axis("off")
+
+            # Right subplot: After NMS (filtered detections)
+            axes[1].imshow(img)
             if len(kept_boxes_by_class[1]) > 0:
                 for box, score in zip(kept_boxes_by_class[1], kept_scores_by_class[1], strict=True):
                     x1, y1, x2, y2 = box.tolist()
                     rect = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2, edgecolor="red", facecolor="none")
-                    ax.add_patch(rect)
-                    ax.text(x1, y1 - 5, f"Pothole: {score:.2f}", color="red", fontsize=8)
+                    axes[1].add_patch(rect)
+                    axes[1].text(x1, y1 - 5, f"{score:.2f}", color="red", fontsize=8)
+            axes[1].set_title(f"After NMS ({len(kept_boxes_by_class[1])} detections)")
+            axes[1].axis("off")
 
-            ax.set_title(f"NMS Results: {image_name}")
-            ax.axis("off")
+            fig.suptitle(f"NMS Comparison: {image_name}", fontsize=14)
             plt.tight_layout()
             plt.savefig(nms_output_dir / f"{Path(image_name).stem}_nms.png", dpi=150)
             plt.close(fig)
@@ -176,6 +191,78 @@ def main() -> None:
     logger.info(f"  mAP: {results['map']:.4f}")
     logger.info(f"  mAP@50: {results['map_50']:.4f}")
     logger.info(f"  mAP@75: {results['map_75']:.4f}")
+
+    # Generate and save precision-recall curve
+    figures_dir = script_dir / "figures"
+    figures_dir.mkdir(exist_ok=True)
+
+    # Compute precision-recall curve manually from predictions and targets
+    # Collect all predictions with their scores and match status
+    all_scores = []
+    all_matches = []
+    total_gt = 0
+
+    for pred, target in zip(all_predictions, all_targets, strict=True):
+        pred_boxes = pred["boxes"]
+        pred_scores = pred["scores"]
+        gt_boxes = target["boxes"]
+
+        total_gt += len(gt_boxes)
+
+        if len(pred_boxes) == 0:
+            continue
+
+        if len(gt_boxes) == 0:
+            # All predictions are false positives
+            for score in pred_scores:
+                all_scores.append(score.item() if isinstance(score, torch.Tensor) else score)
+                all_matches.append(0)
+            continue
+
+        # Compute IoU between predictions and ground truth
+        ious = box_iou(pred_boxes, gt_boxes)
+
+        # Match predictions to ground truth (greedy matching at IoU >= threshold)
+        gt_matched = [False] * len(gt_boxes)
+        for i, score in enumerate(pred_scores):
+            all_scores.append(score.item() if isinstance(score, torch.Tensor) else score)
+            max_iou, max_idx = ious[i].max(dim=0)
+            if max_iou >= args.iou_threshold and not gt_matched[max_idx]:
+                all_matches.append(1)  # True positive
+                gt_matched[max_idx] = True
+            else:
+                all_matches.append(0)  # False positive
+
+    # Sort by score (descending)
+    if len(all_scores) > 0:
+        sorted_indices = sorted(range(len(all_scores)), key=lambda i: all_scores[i], reverse=True)
+        sorted_matches = [all_matches[i] for i in sorted_indices]
+
+        # Compute precision and recall at each threshold
+        tp_cumsum = 0
+        precisions = []
+        recalls = []
+        for i, match in enumerate(sorted_matches):
+            tp_cumsum += match
+            precision = tp_cumsum / (i + 1)
+            recall = tp_cumsum / total_gt if total_gt > 0 else 0
+            precisions.append(precision)
+            recalls.append(recall)
+
+        # Plot precision-recall curve
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.plot(recalls, precisions, "b-", linewidth=2)
+        ax.fill_between(recalls, precisions, alpha=0.3)
+        ax.set_xlabel("Recall", fontsize=12)
+        ax.set_ylabel("Precision", fontsize=12)
+        ax.set_title(f"Precision-Recall Curve (AP@50: {results['map_50']:.4f})", fontsize=14)
+        ax.set_xlim((0, 1))
+        ax.set_ylim((0, 1))
+        ax.grid(visible=True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(figures_dir / "precision_recall_curve.png", dpi=150)
+        plt.close(fig)
+        logger.info(f"Precision-Recall curve saved to {figures_dir / 'precision_recall_curve.png'}")
 
 
 if __name__ == "__main__":
