@@ -2,7 +2,7 @@
 #BSUB -J train_pothole
 #BSUB -q c02516
 #BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -W 04:00
+#BSUB -W 10:00
 #BSUB -R "rusage[mem=16GB]"
 #BSUB -n 4
 #BSUB -R "span[hosts=1]"

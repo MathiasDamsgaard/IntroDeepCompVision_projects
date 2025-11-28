@@ -128,8 +128,6 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(exist_ok=True)
 
-    best_acc = 0.0
-
     for epoch in range(args.epochs):
         logger.info(f"Epoch {epoch + 1}/{args.epochs}")
 
@@ -139,15 +137,12 @@ def main() -> None:
         val_loss, val_acc = evaluate(model, val_loader, criterion, device)
         logger.info(f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
 
-        if val_acc > best_acc:
-            best_acc = val_acc
-            torch.save(model.state_dict(), output_dir / "best_model.pth")
-            logger.info("Saved best model")
+    # Save last model
+    torch.save(model.state_dict(), output_dir / "last_model.pth")
+    logger.info("Saved last model")
 
-    logger.info("Training complete. Loading best model for testing...")
-
-    # Load best model
-    model.load_state_dict(torch.load(output_dir / "best_model.pth"))
+    # Test
+    logger.info("Training complete. Starting testing...")
     test_loss, test_acc = evaluate(model, test_loader, criterion, device)
     logger.info(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
 
