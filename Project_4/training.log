@@ -1,0 +1,247 @@
+14:30:25 INFO Step 1: Extracting object proposals...
+14:30:25 INFO Found 665 images.
+14:41:43 INFO Processed 665 images.
+14:41:43 INFO Step 2: Loading annotations...
+14:41:43 INFO Loaded annotations for 665 images.
+14:41:43 INFO Step 3: Splitting data into Train/Val/Test...
+14:41:43 INFO Training set: 425 images
+14:41:43 INFO Validation set: 107 images
+14:41:43 INFO Test set: 133 images
+14:41:43 INFO Step 4: Evaluating proposals on training set...
+14:41:52 INFO Recall and MABO at different number of proposals:
+14:41:52 INFO Top 50: Recall=0.3802, MABO=0.4137
+14:41:52 INFO Top 100: Recall=0.5516, MABO=0.5203
+14:41:52 INFO Top 500: Recall=0.8606, MABO=0.6937
+14:41:52 INFO Top 1000: Recall=0.8945, MABO=0.7249
+14:41:52 INFO Top 1500: Recall=0.9011, MABO=0.7354
+14:41:52 INFO Top 2000: Recall=0.9011, MABO=0.7380
+14:41:53 INFO Evaluation plot saved to /zhome/26/4/167842/Documents/IntroDeepCompVision_projects/Project_4/figures/proposals_evaluation.png
+14:41:53 INFO Step 5: Preparing proposals for training and testing (Top 1000)...
+14:41:55 INFO Generated 283702 training samples.
+14:41:55 INFO Training - Positive samples: 257
+14:41:55 INFO Training - Negative samples: 283445
+14:41:57 INFO Saved training proposals to /zhome/26/4/167842/Documents/IntroDeepCompVision_projects/Project_4/proposals_data/train_proposals.pkl
+14:41:57 INFO Generated 72998 validation samples.
+14:41:57 INFO Validation - Positive samples: 39
+14:41:57 INFO Validation - Negative samples: 72959
+14:41:58 INFO Saved validation proposals to /zhome/26/4/167842/Documents/IntroDeepCompVision_projects/Project_4/proposals_data/val_proposals.pkl
+14:41:58 INFO Generated 87705 test samples.
+14:41:58 INFO Testing - Positive samples: 46
+14:41:58 INFO Testing - Negative samples: 87659
+14:41:59 INFO Saved test proposals to /zhome/26/4/167842/Documents/IntroDeepCompVision_projects/Project_4/proposals_data/test_proposals.pkl
+
+15:01:46 INFO Step 1: Extracting object proposals...
+15:01:46 INFO Found 665 images.
+15:12:52 INFO Processed 665 images.
+15:12:52 INFO Step 2: Loading annotations...
+15:12:53 INFO Loaded annotations for 665 images.
+15:12:53 INFO Step 3: Splitting data into Train/Val/Test...
+15:12:53 INFO Training set: 425 images
+15:12:53 INFO Validation set: 107 images
+15:12:53 INFO Test set: 133 images
+15:12:53 INFO Step 4: Evaluating proposals on training set...
+15:13:02 INFO Recall and MABO at different number of proposals:
+15:13:02 INFO Top 50: Recall=0.3802, MABO=0.4137
+15:13:02 INFO Top 100: Recall=0.5516, MABO=0.5203
+15:13:02 INFO Top 500: Recall=0.8606, MABO=0.6937
+15:13:02 INFO Top 1000: Recall=0.8945, MABO=0.7249
+15:13:02 INFO Top 1500: Recall=0.9011, MABO=0.7354
+15:13:02 INFO Top 2000: Recall=0.9011, MABO=0.7380
+15:13:03 INFO Evaluation plot saved to /zhome/26/4/167842/Documents/IntroDeepCompVision_projects/Project_4/figures/proposals_evaluation.png
+15:13:03 INFO Step 5: Preparing proposals for training and testing (Top 1000)...
+15:13:05 INFO Generated 21507 training samples.
+15:13:05 INFO Training - Positive samples: 257
+15:13:05 INFO Training - Negative samples: 21250
+15:13:05 INFO Saved training proposals to /zhome/26/4/167842/Documents/IntroDeepCompVision_projects/Project_4/proposals_data/train_proposals.pkl
+15:13:05 INFO Generated 5389 validation samples.
+15:13:05 INFO Validation - Positive samples: 39
+15:13:05 INFO Validation - Negative samples: 5350
+15:13:05 INFO Saved validation proposals to /zhome/26/4/167842/Documents/IntroDeepCompVision_projects/Project_4/proposals_data/val_proposals.pkl
+15:13:06 INFO Generated 6696 test samples.
+15:13:06 INFO Testing - Positive samples: 46
+15:13:06 INFO Testing - Negative samples: 6650
+15:13:06 INFO Saved test proposals to /zhome/26/4/167842/Documents/IntroDeepCompVision_projects/Project_4/proposals_data/test_proposals.pkl
+
+15:42:59 INFO Using device: cuda
+15:42:59 INFO Epoch 1/20
+15:44:18 INFO Train Loss: 0.2503, Train Acc: 0.8948
+15:44:40 INFO Val Loss: 0.1299, Val Acc: 0.9523
+15:44:40 INFO Saved best model
+15:44:40 INFO Epoch 2/20
+15:45:59 INFO Train Loss: 0.1825, Train Acc: 0.9300
+15:46:20 INFO Val Loss: 0.1070, Val Acc: 0.9618
+15:46:21 INFO Saved best model
+15:46:21 INFO Epoch 3/20
+15:47:40 INFO Train Loss: 0.1644, Train Acc: 0.9372
+15:48:01 INFO Val Loss: 0.1339, Val Acc: 0.9484
+15:48:01 INFO Epoch 4/20
+15:49:20 INFO Train Loss: 0.1610, Train Acc: 0.9382
+15:49:41 INFO Val Loss: 0.1218, Val Acc: 0.9540
+15:49:41 INFO Epoch 5/20
+15:51:01 INFO Train Loss: 0.1477, Train Acc: 0.9438
+15:51:22 INFO Val Loss: 0.0784, Val Acc: 0.9701
+15:51:22 INFO Saved best model
+15:51:22 INFO Epoch 6/20
+15:52:42 INFO Train Loss: 0.1517, Train Acc: 0.9409
+15:53:03 INFO Val Loss: 0.0542, Val Acc: 0.9801
+15:53:04 INFO Saved best model
+15:53:04 INFO Epoch 7/20
+15:54:23 INFO Train Loss: 0.1437, Train Acc: 0.9436
+15:54:44 INFO Val Loss: 0.1204, Val Acc: 0.9538
+15:54:44 INFO Epoch 8/20
+15:56:03 INFO Train Loss: 0.1480, Train Acc: 0.9433
+15:56:24 INFO Val Loss: 0.1319, Val Acc: 0.9486
+15:56:24 INFO Epoch 9/20
+15:57:43 INFO Train Loss: 0.1450, Train Acc: 0.9435
+15:58:04 INFO Val Loss: 0.0917, Val Acc: 0.9647
+15:58:04 INFO Epoch 10/20
+15:59:23 INFO Train Loss: 0.1330, Train Acc: 0.9485
+15:59:46 INFO Val Loss: 0.0782, Val Acc: 0.9709
+15:59:46 INFO Epoch 11/20
+16:01:05 INFO Train Loss: 0.1361, Train Acc: 0.9474
+16:01:27 INFO Val Loss: 0.0694, Val Acc: 0.9746
+16:01:27 INFO Epoch 12/20
+16:02:45 INFO Train Loss: 0.1311, Train Acc: 0.9495
+16:03:06 INFO Val Loss: 0.0784, Val Acc: 0.9709
+16:03:06 INFO Epoch 13/20
+16:04:25 INFO Train Loss: 0.1334, Train Acc: 0.9485
+16:04:46 INFO Val Loss: 0.0597, Val Acc: 0.9779
+16:04:46 INFO Epoch 14/20
+16:06:05 INFO Train Loss: 0.1390, Train Acc: 0.9481
+16:06:26 INFO Val Loss: 0.1130, Val Acc: 0.9573
+16:06:26 INFO Epoch 15/20
+16:07:45 INFO Train Loss: 0.1388, Train Acc: 0.9465
+16:08:06 INFO Val Loss: 0.0912, Val Acc: 0.9629
+16:08:06 INFO Epoch 16/20
+16:09:25 INFO Train Loss: 0.1311, Train Acc: 0.9485
+16:09:46 INFO Val Loss: 0.1418, Val Acc: 0.9449
+16:09:46 INFO Epoch 17/20
+16:11:05 INFO Train Loss: 0.1388, Train Acc: 0.9474
+16:11:26 INFO Val Loss: 0.0917, Val Acc: 0.9657
+16:11:26 INFO Epoch 18/20
+16:12:45 INFO Train Loss: 0.1372, Train Acc: 0.9467
+16:13:06 INFO Val Loss: 0.1117, Val Acc: 0.9586
+16:13:06 INFO Epoch 19/20
+16:14:25 INFO Train Loss: 0.1329, Train Acc: 0.9480
+16:14:46 INFO Val Loss: 0.0719, Val Acc: 0.9731
+16:14:46 INFO Epoch 20/20
+16:16:04 INFO Train Loss: 0.1242, Train Acc: 0.9524
+16:16:26 INFO Val Loss: 0.1331, Val Acc: 0.9493
+16:16:26 INFO Training complete. Loading best model for testing...
+16:16:53 INFO Test Loss: 0.0553, Test Acc: 0.9821
+
+16:30:44 INFO Using device: cuda
+16:32:18 INFO Mean Average Precision Results:
+16:32:18 INFO   mAP: 0.0786
+16:32:18 INFO   mAP@50: 0.0934
+16:32:18 INFO   mAP@75: 0.0659
+
+16:58:14 INFO Step 1: Extracting object proposals...
+16:58:14 INFO Found 665 images.
+17:07:50 INFO Processed 665 images.
+17:07:50 INFO Step 2: Loading annotations...
+17:07:50 INFO Loaded annotations for 665 images.
+17:07:50 INFO Step 3: Splitting data into Train/Val/Test...
+17:07:50 INFO Training set: 425 images
+17:07:50 INFO Validation set: 107 images
+17:07:50 INFO Test set: 133 images
+17:07:50 INFO Step 4: Evaluating proposals on training set...
+17:07:58 INFO Recall and MABO at different number of proposals:
+17:07:58 INFO Top 50: Recall=0.3802, MABO=0.4137
+17:07:58 INFO Top 100: Recall=0.5516, MABO=0.5203
+17:07:58 INFO Top 500: Recall=0.8606, MABO=0.6937
+17:07:58 INFO Top 1000: Recall=0.8945, MABO=0.7249
+17:07:58 INFO Top 1500: Recall=0.9011, MABO=0.7354
+17:07:58 INFO Top 2000: Recall=0.9011, MABO=0.7380
+17:07:58 INFO Evaluation plot saved to /zhome/26/4/167842/Documents/IntroDeepCompVision_projects/Project_4/figures/proposals_evaluation.png
+17:07:58 INFO Step 5: Preparing proposals for training and testing (Top 1000)...
+17:08:00 INFO Generated 50885 training samples.
+17:08:00 INFO Training - Positive samples: 8385
+17:08:00 INFO Training - Negative samples: 42500
+17:08:00 INFO Saved training proposals to /zhome/26/4/167842/Documents/IntroDeepCompVision_projects/Project_4/proposals_data/train_proposals.pkl
+17:08:01 INFO Generated 12762 validation samples.
+17:08:01 INFO Validation - Positive samples: 2062
+17:08:01 INFO Validation - Negative samples: 10700
+17:08:01 INFO Saved validation proposals to /zhome/26/4/167842/Documents/IntroDeepCompVision_projects/Project_4/proposals_data/val_proposals.pkl
+17:08:01 INFO Generated 15581 test samples.
+17:08:01 INFO Testing - Positive samples: 2281
+17:08:01 INFO Testing - Negative samples: 13300
+17:08:01 INFO Saved test proposals to /zhome/26/4/167842/Documents/IntroDeepCompVision_projects/Project_4/proposals_data/test_proposals.pkl
+
+17:32:18 INFO Using device: cuda
+17:32:18 INFO Epoch 1/20
+17:35:19 INFO Train Loss: 0.3232, Train Acc: 0.8600
+17:36:03 INFO Val Loss: 0.2449, Val Acc: 0.8940
+17:36:03 INFO Epoch 2/20
+17:39:03 INFO Train Loss: 0.2881, Train Acc: 0.8775
+17:39:47 INFO Val Loss: 0.2491, Val Acc: 0.8903
+17:39:47 INFO Epoch 3/20
+17:42:47 INFO Train Loss: 0.2807, Train Acc: 0.8815
+17:43:32 INFO Val Loss: 0.3110, Val Acc: 0.8695
+17:43:32 INFO Epoch 4/20
+17:46:33 INFO Train Loss: 0.2861, Train Acc: 0.8791
+17:47:18 INFO Val Loss: 0.2682, Val Acc: 0.8878
+17:47:18 INFO Epoch 5/20
+17:50:18 INFO Train Loss: 0.2790, Train Acc: 0.8820
+17:51:03 INFO Val Loss: 0.2434, Val Acc: 0.8986
+17:51:03 INFO Epoch 6/20
+17:54:03 INFO Train Loss: 0.2807, Train Acc: 0.8821
+17:54:48 INFO Val Loss: 0.2371, Val Acc: 0.8982
+17:54:48 INFO Epoch 7/20
+17:57:49 INFO Train Loss: 0.2811, Train Acc: 0.8818
+17:58:34 INFO Val Loss: 0.2573, Val Acc: 0.8906
+17:58:34 INFO Epoch 8/20
+18:01:36 INFO Train Loss: 0.2801, Train Acc: 0.8829
+18:02:21 INFO Val Loss: 0.2522, Val Acc: 0.8911
+18:02:21 INFO Epoch 9/20
+18:05:23 INFO Train Loss: 0.2779, Train Acc: 0.8813
+18:06:08 INFO Val Loss: 0.2428, Val Acc: 0.8952
+18:06:08 INFO Epoch 10/20
+18:09:10 INFO Train Loss: 0.2820, Train Acc: 0.8827
+18:09:55 INFO Val Loss: 0.2400, Val Acc: 0.8977
+18:09:55 INFO Epoch 11/20
+18:12:56 INFO Train Loss: 0.2779, Train Acc: 0.8852
+18:13:42 INFO Val Loss: 0.2394, Val Acc: 0.8988
+18:13:42 INFO Epoch 12/20
+18:16:44 INFO Train Loss: 0.2756, Train Acc: 0.8845
+18:17:29 INFO Val Loss: 0.2937, Val Acc: 0.8755
+18:17:29 INFO Epoch 13/20
+18:20:31 INFO Train Loss: 0.2782, Train Acc: 0.8830
+18:21:17 INFO Val Loss: 0.2532, Val Acc: 0.8920
+18:21:17 INFO Epoch 14/20
+18:24:19 INFO Train Loss: 0.2819, Train Acc: 0.8804
+18:25:05 INFO Val Loss: 0.2358, Val Acc: 0.9003
+18:25:05 INFO Epoch 15/20
+18:28:07 INFO Train Loss: 0.2756, Train Acc: 0.8846
+18:28:52 INFO Val Loss: 0.2393, Val Acc: 0.8971
+18:28:52 INFO Epoch 16/20
+18:31:55 INFO Train Loss: 0.2786, Train Acc: 0.8842
+18:32:40 INFO Val Loss: 0.2347, Val Acc: 0.9002
+18:32:40 INFO Epoch 17/20
+18:35:43 INFO Train Loss: 0.2767, Train Acc: 0.8837
+18:36:29 INFO Val Loss: 0.2386, Val Acc: 0.9009
+18:36:29 INFO Epoch 18/20
+18:39:34 INFO Train Loss: 0.2788, Train Acc: 0.8823
+18:40:20 INFO Val Loss: 0.2347, Val Acc: 0.9011
+18:40:20 INFO Epoch 19/20
+18:43:25 INFO Train Loss: 0.2793, Train Acc: 0.8815
+18:44:11 INFO Val Loss: 0.2371, Val Acc: 0.8989
+18:44:11 INFO Epoch 20/20
+18:47:15 INFO Train Loss: 0.2833, Train Acc: 0.8821
+18:48:01 INFO Val Loss: 0.2370, Val Acc: 0.8988
+18:48:01 INFO Saved last model
+18:48:01 INFO Training complete. Starting testing...
+18:48:58 INFO Test Loss: 0.2505, Test Acc: 0.8995
+
+08:12:47 INFO Using device: cuda
+08:15:28 INFO Mean Average Precision Results:
+08:15:28 INFO   mAP: 0.0874
+08:15:28 INFO   mAP@50: 0.0966
+08:15:28 INFO   mAP@75: 0.0851
+
+17:36:38 INFO Using device: cuda
+17:39:20 INFO Mean Average Precision Results:
+17:39:20 INFO   mAP: 0.0874
+17:39:20 INFO   mAP@50: 0.0966
+17:39:20 INFO   mAP@75: 0.0851
+17:39:21 INFO Precision-Recall curve saved to /zhome/26/4/167842/Documents/IntroDeepCompVision_projects/Project_4/figures/precision_recall_curve.png
